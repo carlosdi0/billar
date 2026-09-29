@@ -44,6 +44,7 @@ function buildCloth(geometry: TableGeometry, material: THREE.Material): THREE.Me
     -SLATE_THICKNESS,
   );
   const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -192,6 +193,8 @@ function buildPockets(geometry: TableGeometry, material: THREE.Material): THREE.
     const floor = new THREE.Mesh(new THREE.CircleGeometry(radius * 0.85, 24), bottom);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(p.x, -POCKET_DEPTH + 0.004, p.z);
+    liner.castShadow = true;
+    floor.castShadow = true;
     group.add(liner, floor);
     caps.push(...buildPocketCap(p));
   }
