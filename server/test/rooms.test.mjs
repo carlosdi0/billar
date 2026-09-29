@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 const BASE = (process.argv[2] ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
 const WS_BASE = BASE.replace(/^http/, 'ws');
 const ORIGIN = 'http://localhost:5190';
+const PROTOCOL = 2;
 const ROOM = `T${randomBytes(3).toString('hex').toUpperCase()}`;
 
 let failures = 0;
@@ -69,7 +70,7 @@ class Client {
   }
   async hello(look = 1) {
     await this.opened;
-    this.send({ t: 'hello', v: 1, token: this.token, name: this.name, look });
+    this.send({ t: 'hello', v: PROTOCOL, token: this.token, name: this.name, look });
     return this.type('welcome');
   }
   drain() {
@@ -136,6 +137,24 @@ async function main() {
   const gotPose = await b.type('pose');
   check('pose relayed to B with id', gotPose?.id === wa.you && gotPose.pose.action === 'drink', gotPose);
   check('pose not echoed to A', (await a.type('pose', 400)) === null);
+
+  a.send({ t: 'chat', text: '  hola   vaquero ​ ' });
+  const gotChat = await b.type('chat');
+  check('chat relayed sanitized with id', gotChat?.id === wa.you && gotChat.text === 'hola vaquero', gotChat);
+  check('chat not echoed to A', (await a.type('chat', 400)) === null);
+  a.send({ t: 'chat', text: 'x'.repeat(500) });
+  check('long chat clipped to 120', (await b.type('chat'))?.text.length === 120);
+  a.send({ t: 'chat', text: '  ' });
+  check('empty chat -> bad', (await a.type('error'))?.code === 'bad');
+  a.send({ t: 'chat', text: 42 });
+  check('non-string chat -> bad', (await a.type('error'))?.code === 'bad');
+  await sleep(5_100);
+  b.drain();
+  for (let i = 0; i < 12; i++) a.send({ t: 'chat', text: `spam ${i}` });
+  await sleep(600);
+  const chats = b.inbox.filter((m) => m.t === 'chat').length;
+  check(`chat rate limit (${chats} of 12)`, chats === 5, chats);
+  b.drain();
 
   a.send({ t: 'pose', pose: { ...pose, x: null } });
   check('invalid pose -> bad', (await a.type('error'))?.code === 'bad');
@@ -213,7 +232,7 @@ async function main() {
   const wc = await c.hello();
   check('new player takes seat 2, not 1', wc?.players.find((p) => p.id === wc.you)?.seat === 2);
 
-  c.send({ t: 'hello', v: 1, token: c.token, name: 'x', look: 0 });
+  c.send({ t: 'hello', v: PROTOCOL, token: c.token, name: 'x', look: 0 });
   check('second hello -> bad', (await c.type('error'))?.code === 'bad');
 
   const v = new Client('Old');

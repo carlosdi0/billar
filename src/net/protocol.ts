@@ -1,11 +1,24 @@
 import type { MatchState } from '../game/rules';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const MAX_SEATS = 4;
 export const MAX_CONNECTIONS = 8;
 export const MAX_NAME_LENGTH = 16;
 export const MAX_FACE_BYTES = 60_000;
 export const MAX_MESSAGE_BYTES = 80_000;
+export const MAX_CHAT_LENGTH = 120;
+export const POCKET_COUNT = 6;
+
+/** Strips control/format characters, collapses whitespace and clips to `maxLength` code points. */
+export function sanitizeText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  const cleaned = value
+    .slice(0, maxLength * 4)
+    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return Array.from(cleaned).slice(0, maxLength).join('').trim();
+}
 
 export type PoseAction = 'idle' | 'walk' | 'run' | 'lean' | 'wave' | 'drink';
 export const POSE_ACTIONS: readonly PoseAction[] = ['idle', 'walk', 'run', 'lean', 'wave', 'drink'];
@@ -78,6 +91,7 @@ export type ClientMessage =
   | { t: 'shot'; shot: ShotMessage }
   | { t: 'result'; result: ShotResult }
   | { t: 'music'; music: MusicState | null }
+  | { t: 'chat'; text: string }
   | { t: 'ping' };
 
 export type ServerMessage =
@@ -91,6 +105,7 @@ export type ServerMessage =
   | { t: 'shot'; id: string; shot: ShotMessage }
   | { t: 'result'; id: string; result: ShotResult }
   | { t: 'music'; shared: SharedMusic | null }
+  | { t: 'chat'; id: string; text: string }
   | { t: 'error'; code: 'full' | 'version' | 'bad' | 'forbidden'; message: string }
   | { t: 'pong' };
 

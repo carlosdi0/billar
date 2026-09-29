@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BALL_RADIUS as R } from '../config';
 import type { CameraRig } from '../render/cameraRig';
+import { isTyping } from './walker';
 
 export interface PointerHost {
   canAim(): boolean;
@@ -118,6 +119,7 @@ export class PointerControls {
   }
 
   private key(e: KeyboardEvent): void {
+    if (isTyping(e)) return;
     if (e.key === 'c' || e.key === 'C') {
       this.host.toggleView();
       return;

@@ -12,6 +12,7 @@ export interface HudHandlers {
   onToggleMusic(): void;
   onStandUp(): void;
   onJukebox(): void;
+  onChat(): void;
   onRestart(): void;
   onStart(assisted: boolean): void;
   onOnline(choice: OnlineChoice): void;
@@ -32,6 +33,7 @@ const ICONS = {
   musicOff: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>',
   radio: '<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l9-5"/><circle cx="15.5" cy="14" r="3"/><path d="M6 12h4M6 15h4"/></svg>',
   walk: '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M11 21l2-6 3 3v3M8 12l3-4 3 1 2 4 3 1M11 8l-1 5"/></svg>',
+  chat: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8H7"/><path d="M9 1L6 4l3 3"/></svg>',
 };
 
@@ -63,6 +65,7 @@ export class Hud {
   private readonly soundButton: HTMLButtonElement;
   private readonly musicButton: HTMLButtonElement;
   private readonly standButton: HTMLButtonElement;
+  private readonly chatButton: HTMLButtonElement;
   private currentHint = '';
   private readonly overlay: HTMLElement;
   private readonly controls: HTMLElement;
@@ -88,6 +91,8 @@ export class Hud {
     this.musicButton = this.button(buttons, ICONS.music, 'Música del saloon', handlers.onToggleMusic);
     this.button(buttons, ICONS.radio, 'Gramola: música de YouTube', handlers.onJukebox);
     this.standButton = this.button(buttons, ICONS.walk, 'Levantarse y pasear (Q)', handlers.onStandUp);
+    this.chatButton = this.button(buttons, ICONS.chat, 'Chat (Enter)', handlers.onChat);
+    this.chatButton.style.display = 'none';
     this.button(buttons, ICONS.restart, 'Nueva partida', handlers.onRestart);
 
     this.toastBox = el('div', 'toasts', this.root);
@@ -240,6 +245,10 @@ export class Hud {
 
   setStandUpAvailable(available: boolean): void {
     this.standButton.style.display = available ? '' : 'none';
+  }
+
+  setChatAvailable(available: boolean): void {
+    this.chatButton.style.display = available ? '' : 'none';
   }
 
   setWalkMode(walking: boolean): void {

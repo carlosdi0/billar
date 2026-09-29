@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
+  MAX_CHAT_LENGTH,
   MAX_CONNECTIONS,
   MAX_FACE_BYTES,
   MAX_MESSAGE_BYTES,
@@ -8,6 +9,7 @@ import {
   POSE_ACTIONS,
   PROTOCOL_VERSION,
   ROOM_CODE_PATTERN,
+  sanitizeText,
   YOUTUBE_LIST_PATTERN,
   YOUTUBE_VIDEO_PATTERN,
 } from '../../src/net/protocol';
@@ -35,6 +37,8 @@ const EMPTY_ROOM_TTL_MS = 24 * 60 * 60_000;
 const HELLO_TIMEOUT_MS = 10_000;
 const RATE_WINDOW_MS = 1_000;
 const RATE_MAX_MESSAGES = 60;
+const CHAT_WINDOW_MS = 5_000;
+const CHAT_MAX_MESSAGES = 5;
 const MAX_PENDING_SOCKETS = MAX_CONNECTIONS + 4;
 const BALL_COUNT = 16;
 const MAX_RESULT_MESSAGES = 20;
@@ -151,6 +155,7 @@ export class Room extends DurableObject<Env> {
   private emptySince: number | null = null;
   private music: StoredMusic | null = null;
   private readonly rate = new Map<string, { windowStart: number; count: number }>();
+  private readonly chatRate = new Map<string, { windowStart: number; count: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -223,6 +228,8 @@ export class Room extends DurableObject<Env> {
         return this.handleResult(live, msg);
       case 'music':
         return this.handleMusic(live, msg);
+      case 'chat':
+        return this.handleChat(live, msg);
       case 'ping':
         this.send(ws, { t: 'pong' });
         return;
@@ -350,6 +357,7 @@ export class Room extends DurableObject<Env> {
   private async handleDisconnect(ws: WebSocket): Promise<void> {
     const att = readAttachment(ws);
     this.rate.delete(att?.conn ?? '');
+    this.chatRate.delete(att?.conn ?? '');
     ws.serializeAttachment(att ? { conn: att.conn, acceptedAt: att.acceptedAt } : null);
     const token = att?.token;
     if (!token) return;
@@ -407,6 +415,13 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.put({ [faceKey(from.att.token)]: data, [KEY_MEMBERS]: this.members });
     this.broadcast({ t: 'face', id: from.att.id, data }, from.ws);
     this.broadcastPlayers();
+  }
+
+  private handleChat(from: Live, msg: Record<string, unknown>): void {
+    const text = sanitizeText(msg.text, MAX_CHAT_LENGTH);
+    if (!text) return this.sendError(from.ws, 'bad', 'Invalid chat');
+    if (this.isChatLimited(from.att.conn)) return;
+    this.broadcast({ t: 'chat', id: from.att.id, text }, from.ws);
   }
 
   private async handleMusic(from: Live, msg: Record<string, unknown>): Promise<void> {
@@ -566,14 +581,11 @@ export class Room extends DurableObject<Env> {
   }
 
   private isRateLimited(conn: string): boolean {
-    const now = Date.now();
-    const entry = this.rate.get(conn);
-    if (!entry || now - entry.windowStart >= RATE_WINDOW_MS) {
-      this.rate.set(conn, { windowStart: now, count: 1 });
-      return false;
-    }
-    entry.count++;
-    return entry.count > RATE_MAX_MESSAGES;
+    return exceedsRate(this.rate, conn, RATE_WINDOW_MS, RATE_MAX_MESSAGES);
+  }
+
+  private isChatLimited(conn: string): boolean {
+    return exceedsRate(this.chatRate, conn, CHAT_WINDOW_MS, CHAT_MAX_MESSAGES);
   }
 
   // ------------------------------------------------------------ transport
@@ -620,6 +632,22 @@ export class Room extends DurableObject<Env> {
   }
 }
 
+function exceedsRate(
+  windows: Map<string, { windowStart: number; count: number }>,
+  conn: string,
+  windowMs: number,
+  max: number,
+): boolean {
+  const now = Date.now();
+  const entry = windows.get(conn);
+  if (!entry || now - entry.windowStart >= windowMs) {
+    windows.set(conn, { windowStart: now, count: 1 });
+    return false;
+  }
+  entry.count++;
+  return entry.count > max;
+}
+
 // ---------------------------------------------------------------- validation
 
 function readAttachment(ws: WebSocket): Attachment | null {
@@ -652,13 +680,7 @@ function isInteger(value: unknown): value is number {
 }
 
 function sanitizeName(value: unknown): string {
-  if (typeof value !== 'string') return FALLBACK_NAME;
-  const cleaned = value
-    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim();
-  const clipped = Array.from(cleaned).slice(0, MAX_NAME_LENGTH).join('').trim();
-  return clipped || FALLBACK_NAME;
+  return sanitizeText(value, MAX_NAME_LENGTH) || FALLBACK_NAME;
 }
 
 function parsePose(value: unknown): Pose | null {

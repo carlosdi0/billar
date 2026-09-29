@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TABLE } from '../config';
 import type { Pose } from '../net/protocol';
 import { createCharacter, createFaceTexture, DEFAULT_LOOKS, type Character, type CharacterAction, type CharacterLook, type CharacterQuality } from './character';
+import { SpeechBubble } from './speechBubble';
 import { TABLE_EXTENT } from './table';
 
 const FLOOR_Y = -TABLE.surfaceHeight;
@@ -35,6 +36,7 @@ interface Remote {
   label: THREE.Sprite;
   labelTexture: THREE.CanvasTexture;
   labelCanvas: HTMLCanvasElement;
+  bubble: SpeechBubble;
   faceTexture: THREE.Texture | null;
   faceToken: number;
   pose: Pose | null;
@@ -139,9 +141,10 @@ export class RemotePlayers {
       const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture, transparent: true, depthWrite: false }));
       label.renderOrder = 10;
       label.visible = false;
-      this.group.add(label);
+      const bubble = new SpeechBubble();
+      this.group.add(label, bubble.sprite);
 
-      r = { id, name, look, seat, connected, character, label, labelTexture, labelCanvas, faceTexture: null, faceToken: 0, pose: null, x: 0, z: 0, yaw: 0, speed: 0, placed: false };
+      r = { id, name, look, seat, connected, character, label, labelTexture, labelCanvas, bubble, faceTexture: null, faceToken: 0, pose: null, x: 0, z: 0, yaw: 0, speed: 0, placed: false };
       this.players.set(id, r);
       drawLabel(r);
       return;
@@ -161,7 +164,8 @@ export class RemotePlayers {
     if (!r) return;
     r.faceToken++;
     this.group.remove(r.character.object);
-    this.group.remove(r.label);
+    this.group.remove(r.label, r.bubble.sprite);
+    r.bubble.dispose();
     r.character.dispose();
     r.faceTexture?.dispose();
     r.labelTexture.dispose();
@@ -191,6 +195,10 @@ export class RemotePlayers {
     r.character.setFace(texture);
     r.faceTexture?.dispose();
     r.faceTexture = texture;
+  }
+
+  say(id: string, text: string): void {
+    this.players.get(id)?.bubble.say(text);
   }
 
   setPose(id: string, pose: Pose): void {
@@ -249,6 +257,7 @@ export class RemotePlayers {
       if (!r.pose && !shooting) {
         r.character.object.visible = false;
         r.label.visible = false;
+        r.bubble.update(dt, r.x, FLOOR_Y, r.z, tmpVec, false);
         continue;
       }
 
@@ -301,14 +310,16 @@ export class RemotePlayers {
       const dz = r.z - camZ;
       const dy = FLOOR_Y + r.character.height + LABEL_LIFT - camY;
       const dist = Math.hypot(dx, dy, dz);
+      const labelY = FLOOR_Y + r.character.height + LABEL_LIFT;
+      const h = THREE.MathUtils.clamp(dist * LABEL_DISTANCE_K, LABEL_HEIGHT_MIN, LABEL_HEIGHT_MAX);
+      r.bubble.update(dt, r.x, labelY + h * 0.6, r.z, tmpVec);
       if (dist < LABEL_HIDE_DISTANCE) {
         r.label.visible = false;
         continue;
       }
-      const h = THREE.MathUtils.clamp(dist * LABEL_DISTANCE_K, LABEL_HEIGHT_MIN, LABEL_HEIGHT_MAX);
       r.label.visible = true;
       r.label.scale.set(h * LABEL_ASPECT, h, 1);
-      r.label.position.set(r.x, FLOOR_Y + r.character.height + LABEL_LIFT, r.z);
+      r.label.position.set(r.x, labelY, r.z);
     }
   }
 }

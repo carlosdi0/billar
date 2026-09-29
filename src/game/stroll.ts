@@ -6,6 +6,7 @@ import type { CameraRig } from '../render/cameraRig';
 import { createCharacter, DEFAULT_LOOKS, type Character } from '../render/character';
 import type { Patrons } from '../render/patrons';
 import type { Saloon } from '../render/saloon';
+import { SpeechBubble } from '../render/speechBubble';
 import type { Quality } from '../render/stage';
 import { TABLE_EXTENT } from '../render/table';
 
@@ -30,6 +31,7 @@ export class Stroll {
   private drinkTimer = 0;
   private tipsy = 0;
   private readonly sway = new THREE.Vector3();
+  private readonly bubble = new SpeechBubble();
   shots = 0;
 
   constructor(
@@ -44,7 +46,17 @@ export class Stroll {
     this.avatar = createCharacter(DEFAULT_LOOKS[0], { quality });
     this.avatar.object.traverse((o) => (o.castShadow = true));
     this.avatar.object.visible = false;
-    scene.add(this.avatar.object);
+    scene.add(this.avatar.object, this.bubble.sprite);
+  }
+
+  /** Shows a chat line over the avatar (only visible while walking in third person). */
+  say(text: string): void {
+    this.bubble.say(text);
+  }
+
+  /** Stops held movement keys, e.g. when a text field takes the keyboard. */
+  releaseKeys(): void {
+    this.walker.releaseKeys();
   }
 
   get active(): boolean {
@@ -124,6 +136,7 @@ export class Stroll {
   exit(): void {
     this.walker.stop();
     this.avatar.object.visible = false;
+    this.bubble.sprite.visible = false;
   }
 
   get position(): THREE.Vector2 {
@@ -162,6 +175,7 @@ export class Stroll {
     this.avatar.object.rotation.y = this.walker.bodyYaw;
     this.avatar.object.visible = !this.walker.firstPerson;
     this.avatar.update(dt, time);
+    this.bubble.update(dt, p.x, FLOOR_Y + this.avatar.height + 0.12, p.y, rig.camera.position, !this.walker.firstPerson);
 
     const pose = this.walker.cameraPose();
     if (this.tipsy > 0.01) {

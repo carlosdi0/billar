@@ -3,6 +3,7 @@ import { Sfx } from '../audio/sfx';
 import { Jukebox } from '../audio/youtube';
 import { BALL_RADIUS as R, HALF_L, HALF_W, HEAD_STRING_X, SHOT } from '../config';
 import { PointerControls } from '../input/pointer';
+import { MAX_CHAT_LENGTH, sanitizeText } from '../net/protocol';
 import type {
   AimState,
   BallsState,
@@ -29,6 +30,7 @@ import { RemotePlayers } from '../render/remotePlayers';
 import { createEnvironmentMap, createSaloon, type Saloon } from '../render/saloon';
 import { Stage, type Quality } from '../render/stage';
 import { createTable } from '../render/table';
+import { ChatPanel } from '../ui/chat';
 import { Hud } from '../ui/hud';
 import { JukeboxPanel } from '../ui/jukeboxPanel';
 import { LobbyPanel, roomLink, type OnlineChoice } from '../ui/lobby';
@@ -113,6 +115,7 @@ export class Game {
   private pendingResult: ShotResult | null = null;
   private remoteShooter: string | null = null;
   private readonly jukeboxPanel: JukeboxPanel;
+  private readonly chat: ChatPanel;
   private readonly jukebox: Jukebox;
   private djId: string | null = null;
   private djTimer = 0;
@@ -180,7 +183,9 @@ export class Game {
       },
       onOnline: (choice) => this.joinOnline(choice),
       onJukebox: () => this.jukeboxPanel.open(),
+      onChat: () => this.openChat(),
     });
+    this.chat = new ChatPanel(document.body, { onSend: (text) => this.sendChat(text) });
     this.jukeboxPanel = new JukeboxPanel(document.body, {
       onLoad: (source) => this.startJukebox({ ...source, index: 0, time: 0, playing: true }),
       onToggle: () => this.takeDj(() => this.jukebox.togglePlay()),
@@ -342,6 +347,8 @@ export class Game {
       onLeave: () => this.leaveOnline(),
     });
     this.online = { client, lobby, myId: '', players: [] };
+    this.chat.setEnabled(true);
+    this.hud.setChatAvailable(true);
     client.onStatus = (status) => lobby.setStatus(status);
     client.onMessage = (message) => this.onServer(message);
     client.onKicked = (code) => {
@@ -369,6 +376,8 @@ export class Game {
     online.lobby.dispose();
     for (const p of online.players) this.remotes.remove(p.id);
     this.online = null;
+    this.chat.setEnabled(false);
+    this.hud.setChatAvailable(false);
     this.djId = null;
     this.jukebox.dj = true;
     this.leaveStroll();
@@ -432,6 +441,9 @@ export class Game {
       case 'music':
         this.followMusic(message.shared, true);
         break;
+      case 'chat':
+        this.receiveChat(message.id, message.text);
+        break;
       case 'pong':
         break;
     }
@@ -450,6 +462,31 @@ export class Game {
     for (const gone of previous) this.remotes.remove(gone);
     online.lobby.update(players, online.myId, this.phase !== 'menu');
     this.hud.updatePlayers(this.match, this.onTableSet(), this.names());
+  }
+
+  // ---------------------------------------------------------------- chat
+
+  private openChat(): void {
+    if (!this.online) return;
+    this.stroll.releaseKeys();
+    this.chat.open();
+  }
+
+  private sendChat(raw: string): void {
+    const online = this.online;
+    const text = sanitizeText(raw, MAX_CHAT_LENGTH);
+    if (!online || !text) return;
+    online.client.send({ t: 'chat', text });
+    this.chat.add(this.me?.name ?? 'Tú', text, true);
+    this.stroll.say(text);
+  }
+
+  private receiveChat(id: string, raw: string): void {
+    const text = sanitizeText(raw, MAX_CHAT_LENGTH);
+    if (!text) return;
+    const name = this.online?.players.find((p) => p.id === id)?.name ?? 'Alguien';
+    this.chat.add(name, text);
+    this.remotes.say(id, text);
   }
 
   // ---------------------------------------------------------------- jukebox
@@ -707,7 +744,10 @@ export class Game {
 
   private onKey(e: KeyboardEvent): void {
     if (e.repeat || e.target instanceof HTMLInputElement) return;
-    if (e.code === 'KeyQ' && !this.stroll.active) this.standUp();
+    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && this.online && !this.chat.isOpen && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      this.openChat();
+    } else if (e.code === 'KeyQ' && !this.stroll.active) this.standUp();
     else if (e.code === 'KeyE' && this.stroll.active) {
       if (this.stroll.nearBar()) this.orderShot();
       else this.takeCue();

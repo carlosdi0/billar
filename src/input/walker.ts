@@ -26,6 +26,10 @@ const MAX_CAMERA_DISTANCE = 3;
 const FIRST_PERSON_THRESHOLD = 0.25;
 const CEILING_MARGIN = 0.25;
 
+export function isTyping(e: KeyboardEvent): boolean {
+  return e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+}
+
 export class Walker {
   readonly position = new THREE.Vector2();
   yaw = 0;
@@ -53,7 +57,7 @@ export class Walker {
     private readonly ceilingY: number,
   ) {
     window.addEventListener('keydown', (e) => {
-      if (!this.active) return;
+      if (!this.active || isTyping(e)) return;
       this.keys.add(e.code);
       if (e.code === 'Space') e.preventDefault();
     });
@@ -107,6 +111,10 @@ export class Walker {
 
   setDynamicColliders(colliders: { x: number; z: number; r: number }[]): void {
     this.dynamicColliders = colliders;
+  }
+
+  releaseKeys(): void {
+    this.keys.clear();
   }
 
   pressed(code: string): boolean {
