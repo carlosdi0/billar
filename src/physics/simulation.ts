@@ -26,6 +26,11 @@ const CUSHION_CONTACT_SIN = 0.27;
 const SLIP_EPS = 1e-4;
 const MAX_SHOT_TIME = 45;
 
+/** Math.hypot is not guaranteed to round identically across engines; sqrt is, which keeps online replays deterministic. */
+function mag(a: number, b: number, c = 0, d = 0): number {
+  return Math.sqrt(a * a + b * b + c * c + d * d);
+}
+
 export class Simulation {
   readonly balls: Ball[] = [];
   readonly segments: Segment[];
@@ -77,10 +82,10 @@ export class Simulation {
    */
   strike(id: number, dirX: number, dirZ: number, speed: number, tipSide: number, tipVertical: number): void {
     const b = this.balls[id];
-    const len = Math.hypot(dirX, dirZ) || 1;
+    const len = mag(dirX, dirZ) || 1;
     const dx = dirX / len;
     const dz = dirZ / len;
-    const offset = Math.hypot(tipSide, tipVertical);
+    const offset = mag(tipSide, tipVertical);
     const scale = offset > SHOT.maxTipOffset ? SHOT.maxTipOffset / offset : 1;
     const side = tipSide * scale;
     const vertical = tipVertical * scale;
@@ -138,7 +143,7 @@ export class Simulation {
   private integrate(b: Ball, h: number): void {
     const ux = b.vx + R * b.wz;
     const uz = b.vz - R * b.wx;
-    const slip = Math.hypot(ux, uz);
+    const slip = mag(ux, uz);
 
     if (slip > SLIP_EPS) {
       const decel = PHYSICS.slidingFriction * G;
@@ -152,7 +157,7 @@ export class Simulation {
       b.wz += (fx * 2.5) / R;
       if (t >= timeToRoll) this.snapToRolling(b);
     } else {
-      const speed = Math.hypot(b.vx, b.vz);
+      const speed = mag(b.vx, b.vz);
       const decel = PHYSICS.rollingFriction * G * h;
       if (speed <= decel) {
         b.vx = b.vz = 0;
@@ -171,8 +176,8 @@ export class Simulation {
     b.z += b.vz * h;
     this.integrateOrientation(b, h);
 
-    const speed = Math.hypot(b.vx, b.vz);
-    const angular = Math.hypot(b.wx, b.wy, b.wz);
+    const speed = mag(b.vx, b.vz);
+    const angular = mag(b.wx, b.wy, b.wz);
     if (speed < PHYSICS.linearSleep && angular * R < PHYSICS.linearSleep && Math.abs(b.wy) < PHYSICS.angularSleep) {
       b.vx = b.vz = b.wx = b.wy = b.wz = 0;
       b.moving = false;
@@ -193,7 +198,7 @@ export class Simulation {
     const ny = qy - hx * qz + hy * qw + hz * qx;
     const nz = qz + hx * qy - hy * qx + hz * qw;
     const nw = qw - hx * qx - hy * qy - hz * qz;
-    const len = Math.hypot(nx, ny, nz, nw);
+    const len = mag(nx, ny, nz, nw);
     b.q[0] = nx / len;
     b.q[1] = ny / len;
     b.q[2] = nz / len;
@@ -301,14 +306,14 @@ export class Simulation {
     let nearestDist = Infinity;
     for (let i = 0; i < this.pockets.length; i++) {
       const p = this.pockets[i];
-      const dist = Math.hypot(b.x - p.x, b.z - p.z);
+      const dist = mag(b.x - p.x, b.z - p.z);
       if (dist < nearestDist) {
         nearestDist = dist;
         nearest = i;
       }
     }
     if (nearestDist < this.pockets[nearest].captureRadius || outOfBounds) {
-      const speed = Math.hypot(b.vx, b.vz);
+      const speed = mag(b.vx, b.vz);
       this.remove(b.id);
       events.push({ type: 'pocket', ball: b.id, pocket: nearest, speed });
     }

@@ -55,6 +55,8 @@ export interface Character {
   hand(side: CharacterHand): THREE.Object3D;
   setPoseDriver(driver: PoseDriver | null): void;
   setCastShadow(enabled: boolean): void;
+  /** Which prop appears in the right hand during the 'drink' action. */
+  setDrinkProp(kind: 'mug' | 'whisky'): void;
 }
 
 export interface CharacterOptions {
@@ -1041,7 +1043,7 @@ class CharacterImpl implements Character {
   private readonly facePlate: THREE.Mesh;
   private readonly faceMaterial: THREE.MeshStandardMaterial;
   private readonly hands: Record<CharacterHand, THREE.Object3D>;
-  private readonly mug: THREE.Mesh;
+  private mug: THREE.Mesh;
   private material: THREE.MeshStandardMaterial;
   private look: CharacterLook;
   private face: THREE.Texture | null = null;
@@ -1173,6 +1175,16 @@ class CharacterImpl implements Character {
 
   setPoseDriver(driver: PoseDriver | null): void {
     this.driver = driver;
+  }
+
+  setDrinkProp(kind: 'mug' | 'whisky'): void {
+    if (this.mug.name === `prop-${kind}`) return;
+    const next = createHandProp(kind, this.quality);
+    next.visible = this.mug.visible;
+    next.castShadow = this.mug.castShadow;
+    this.hands.R.remove(this.mug);
+    this.hands.R.add(next);
+    this.mug = next;
   }
 
   setCastShadow(enabled: boolean): void {

@@ -282,6 +282,27 @@ export class Sfx {
     this.burst(ctx, t, 0.01, 'highpass', 3500, 0.7, 0.15, this.sfxBus, false);
   }
 
+  /** Glass set on the bar, a gulp, and the empty glass slammed back down. */
+  shot(): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const bus = this.sfxBus;
+    this.tone(ctx, t, 'sine', 2650, 2500, 0.18, 0.12, bus, false);
+    this.tone(ctx, t, 'sine', 4300, 4200, 0.08, 0.05, bus, false);
+    this.burst(ctx, t, 0.03, 'lowpass', 900, 0.6, 0.25, bus, false);
+    for (let k = 0; k < 2; k++) {
+      const g = t + 0.85 + k * 0.28;
+      this.tone(ctx, g, 'sine', 210, 95, 0.16, 0.45, bus, false);
+      this.burst(ctx, g, 0.12, 'bandpass', 420, 3, 0.25, bus, false);
+    }
+    this.burst(ctx, t + 1.55, 0.45, 'bandpass', 1400, 0.8, 0.12, bus, false);
+    const slam = t + 2.15;
+    this.tone(ctx, slam, 'sine', 150, 60, 0.12, 0.7, bus, false);
+    this.tone(ctx, slam, 'sine', 2400, 2250, 0.12, 0.1, bus, false);
+    this.burst(ctx, slam, 0.05, 'lowpass', 1200, 0.6, 0.45, bus, false);
+  }
+
   private piano(dest: AudioNode, midi: number, t: number, vel: number, dur: number, spread: number, counted: boolean): void {
     const ctx = this.ctx!;
     const f = midiToHz(midi);

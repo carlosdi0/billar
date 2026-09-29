@@ -170,7 +170,7 @@ function buildPocketCap(p: Pocket): THREE.BufferGeometry[] {
   );
   const lip = new THREE.CylinderGeometry(inner, inner, CAP_LIP_DEPTH, steps, 1, true, Math.PI / 2 - a1, a1 - a0);
   lip.translate(p.x, TABLE.railHeight + CAP_THICKNESS - CAP_LIP_DEPTH / 2, p.z);
-  return [top.toNonIndexed(), lip.toNonIndexed()];
+  return [top.index ? top.toNonIndexed() : top, lip.index ? lip.toNonIndexed() : lip];
 }
 
 function buildPockets(geometry: TableGeometry, material: THREE.Material): THREE.Group {

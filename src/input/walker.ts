@@ -34,6 +34,11 @@ export class Walker {
   bodyYaw = 0;
   speed = 0;
   active = false;
+  /** Blocks movement input, e.g. while drinking at the bar. */
+  frozen = false;
+  /** 0 = sober; each unit makes walking drift a little more. */
+  wobble = 0;
+  private clock = 0;
 
   private readonly keys = new Set<string>();
   private readonly velocity = new THREE.Vector2();
@@ -109,6 +114,7 @@ export class Walker {
 
   update(dt: number): void {
     if (!this.active) return;
+    this.clock += dt;
     let ix = 0;
     let iz = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) iz += 1;
@@ -117,6 +123,13 @@ export class Walker {
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) ix -= 1;
     const running = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
 
+    if (this.frozen) ix = iz = 0;
+    if (this.wobble > 0 && (ix !== 0 || iz !== 0)) {
+      const sway = Math.sin(this.clock * 1.7) * 0.14 * this.wobble + Math.sin(this.clock * 0.6) * 0.06 * this.wobble;
+      const c = Math.cos(sway);
+      const s = Math.sin(sway);
+      [ix, iz] = [ix * c - iz * s, ix * s + iz * c];
+    }
     const len = Math.hypot(ix, iz);
     const targetSpeed = len > 0 ? (running ? RUN_SPEED : WALK_SPEED) : 0;
     const sin = Math.sin(this.yaw);

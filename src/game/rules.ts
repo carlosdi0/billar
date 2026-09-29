@@ -76,7 +76,9 @@ export function evaluateShot(
   state: MatchState,
   report: ShotReport,
   onTableBefore: ReadonlySet<number>,
+  names: readonly string[] = [playerLabel(0), playerLabel(1)],
 ): Verdict {
+  const label = (p: PlayerIndex) => names[p] ?? playerLabel(p);
   const player = state.current;
   const opponent = other(player);
   const next: MatchState = { ...state, groups: [...state.groups] as [Group | null, Group | null] };
@@ -114,11 +116,11 @@ export function evaluateShot(
       respotEight = true;
       messages.push('La 8 entró en el saque: se recoloca');
     } else if (foul) {
-      return finish(opponent, `${playerLabel(player)} metió la 8 con falta`);
+      return finish(opponent, `${label(player)} metió la 8 con falta`);
     } else if (!wasOnEight) {
-      return finish(opponent, `${playerLabel(player)} metió la 8 antes de tiempo`);
+      return finish(opponent, `${label(player)} metió la 8 antes de tiempo`);
     } else {
-      return finish(player, `${playerLabel(player)} metió la 8`);
+      return finish(player, `${label(player)} metió la 8`);
     }
   }
 
@@ -127,7 +129,7 @@ export function evaluateShot(
     if (firstGroupBall) {
       next.groups[player] = firstGroupBall;
       next.groups[opponent] = firstGroupBall === 'solids' ? 'stripes' : 'solids';
-      messages.push(`${playerLabel(player)} juega con las ${groupLabel(firstGroupBall)}`);
+      messages.push(`${label(player)} juega con las ${groupLabel(firstGroupBall)}`);
     }
   }
 
@@ -141,7 +143,7 @@ export function evaluateShot(
   next.ballInHand = foul !== null;
   next.kitchenOnly = foul !== null && state.isBreak && cueScratch;
   next.current = keepsTurn ? player : opponent;
-  if (foul) messages.unshift(`Falta: ${foul}. Bola en mano para ${playerLabel(opponent)}`);
+  if (foul) messages.unshift(`Falta: ${foul}. Bola en mano para ${label(opponent)}`);
 
   return {
     state: next,

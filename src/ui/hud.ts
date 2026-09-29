@@ -1,5 +1,6 @@
 import { BALL_COLORS } from '../render/textures';
-import { groupBalls, groupLabel, type MatchState, type PlayerIndex } from '../game/rules';
+import { groupBalls, groupLabel, playerLabel, type MatchState, type PlayerIndex } from '../game/rules';
+import { buildOnlineForm, roomCodeFromUrl, type OnlineChoice } from './lobby';
 
 export interface HudHandlers {
   onPowerChange(power: number): void;
@@ -12,6 +13,7 @@ export interface HudHandlers {
   onStandUp(): void;
   onRestart(): void;
   onStart(assisted: boolean): void;
+  onOnline(choice: OnlineChoice): void;
 }
 
 export interface OverlayAction {
@@ -49,7 +51,7 @@ function miniBall(num: number): HTMLElement {
 
 export class Hud {
   private readonly root: HTMLElement;
-  private readonly players: { panel: HTMLElement; group: HTMLElement; balls: HTMLElement }[] = [];
+  private readonly players: { panel: HTMLElement; name: HTMLElement; group: HTMLElement; balls: HTMLElement }[] = [];
   private readonly toastBox: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly powerFill: HTMLElement;
@@ -71,10 +73,11 @@ export class Hud {
     for (const p of [0, 1] as PlayerIndex[]) {
       if (p === 1) el('div', 'versus', board).textContent = '8';
       const panel = el('div', `player p${p}`, board);
-      el('div', 'player-name', panel).textContent = `Jugador ${p + 1}`;
+      const name = el('div', 'player-name', panel);
+      name.textContent = playerLabel(p);
       const group = el('div', 'player-group', panel);
       const balls = el('div', 'player-balls', panel);
-      this.players.push({ panel, group, balls });
+      this.players.push({ panel, name, group, balls });
     }
 
     const buttons = el('div', 'buttons', this.root);
@@ -247,8 +250,9 @@ export class Hud {
     this.hint.classList.toggle('visible', !!text);
   }
 
-  updatePlayers(state: MatchState, onTable: ReadonlySet<number>): void {
+  updatePlayers(state: MatchState, onTable: ReadonlySet<number>, names?: readonly string[]): void {
     this.players.forEach((view, i) => {
+      view.name.textContent = names?.[i] ?? playerLabel(i as PlayerIndex);
       const group = state.groups[i];
       view.panel.classList.toggle('active', state.current === i && state.winner === null);
       view.group.textContent = group ? groupLabel(group) : 'mesa abierta';
@@ -294,10 +298,44 @@ export class Hud {
   }
 
   showStart(): void {
-    this.showOverlay('Ases y Ochos', 'Billar bola 8 en el saloon. Dos jugadores, un solo taco y ninguna prisa.', [
+    const preset = roomCodeFromUrl();
+    if (preset) {
+      this.showOnlineForm(preset);
+      return;
+    }
+    this.showOverlay('Ases y Ochos', 'Billar bola 8 en el saloon. Tira con los colegas aquí mismo o quedad online.', [
+      { label: 'Partida local<small>dos jugadores, un dispositivo</small>', onAction: () => this.showLocalModes() },
+      { label: 'Jugar online<small>crea una sala o únete a una</small>', onAction: () => this.showOnlineForm(null), secondary: true },
+    ]);
+  }
+
+  showLocalModes(): void {
+    this.showOverlay('Partida local', 'Elige la dificultad.', [
       { label: 'Normal<small>con guía de tiro</small>', onAction: () => this.handlers.onStart(true) },
       { label: 'Difícil<small>sin guía, a ojo de pistolero</small>', onAction: () => this.handlers.onStart(false), secondary: true },
+      { label: '← volver', onAction: () => this.showStart(), secondary: true },
     ]);
+  }
+
+  showOnlineForm(presetCode: string | null): void {
+    const subtitle = presetCode
+      ? `Te han invitado a la sala ${presetCode}.`
+      : 'Elige nombre y personaje. Crea una sala y comparte el enlace, o escribe un código.';
+    this.showOverlay('Jugar online', subtitle, []);
+    const card = this.overlay.querySelector<HTMLElement>('.overlay-card')!;
+    card.classList.add('wide');
+    buildOnlineForm(
+      card,
+      presetCode,
+      (choice) => {
+        this.hideOverlay();
+        this.handlers.onOnline(choice);
+      },
+      () => {
+        history.replaceState(null, '', location.pathname);
+        this.showStart();
+      },
+    );
   }
 
   hideOverlay(): void {

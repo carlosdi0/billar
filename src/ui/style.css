@@ -451,6 +451,261 @@ canvas {
   touch-action: none;
 }
 
+/* Online form */
+.overlay-card.wide {
+  max-width: 560px;
+  width: 100%;
+}
+
+.overlay-card .overlay-actions:empty {
+  display: none;
+}
+
+.online-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  position: relative;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-family: 'Rye', Georgia, serif;
+  font-size: 13px;
+  color: #5a2a10;
+  letter-spacing: 0.04em;
+}
+
+.field-input {
+  font: 18px 'Crimson Pro', Georgia, serif;
+  padding: 8px 10px;
+  border: 2px solid rgba(58, 26, 8, 0.5);
+  border-radius: 3px;
+  background: rgba(255, 250, 235, 0.7);
+  color: #2a1a0c;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.field-input:focus {
+  border-color: #3a1a08;
+}
+
+.field-input.code {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 600;
+}
+
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.look-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px 4px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: rgba(58, 26, 8, 0.08);
+  cursor: pointer;
+  font: 13px 'Crimson Pro', Georgia, serif;
+  color: #3a1a08;
+}
+
+.look-option.selected {
+  border-color: #3a1a08;
+  background: rgba(58, 26, 8, 0.18);
+}
+
+.look-figure {
+  width: 26px;
+  height: 38px;
+  position: relative;
+  background:
+    radial-gradient(circle at 50% 11px, var(--skin) 0 6px, transparent 6.5px),
+    linear-gradient(90deg, var(--shirt) 0 22%, var(--vest) 22% 78%, var(--shirt) 78%) 0 18px / 100% 20px no-repeat;
+}
+
+.look-figure::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 2px;
+  height: 5px;
+  border-radius: 50% 50% 2px 2px;
+  background: var(--hat);
+  box-shadow: 0 3px 0 -1px var(--hat);
+}
+
+.form-error {
+  color: #a02010;
+  font-size: 14px;
+  min-height: 1em;
+}
+
+.overlay-link {
+  background: none;
+  border: none;
+  color: #5a2a10;
+  font: italic 15px 'Crimson Pro', Georgia, serif;
+  cursor: pointer;
+  align-self: center;
+  text-decoration: underline;
+}
+
+.overlay-button.small {
+  font-size: 14px;
+  padding: 7px 14px;
+}
+
+.overlay-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Lobby panel */
+.lobby {
+  position: fixed;
+  left: calc(10px + var(--safe-left));
+  top: calc(10px + var(--safe-top));
+  width: min(290px, calc(100vw - 20px));
+  padding: 10px 12px;
+  background: linear-gradient(rgba(244, 226, 190, 0.95), rgba(222, 196, 150, 0.95));
+  color: #2a1a0c;
+  border-radius: 3px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  z-index: 5;
+  font-size: 15px;
+}
+
+.lobby.playing {
+  width: auto;
+  min-width: 170px;
+}
+
+.lobby.collapsed .lobby-list,
+.lobby.collapsed .lobby-note,
+.lobby.collapsed .lobby-actions,
+.lobby.collapsed .lobby-leave,
+.lobby.playing .lobby-note:empty,
+.lobby.playing .lobby-actions:empty {
+  display: none;
+}
+
+.lobby-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lobby-title {
+  font-family: 'Rye', Georgia, serif;
+  font-size: 15px;
+  flex: 1;
+  letter-spacing: 0.06em;
+}
+
+.lobby-copy,
+.lobby-toggle {
+  border: 1px solid rgba(58, 26, 8, 0.5);
+  background: transparent;
+  border-radius: 3px;
+  font: 13px 'Crimson Pro', Georgia, serif;
+  color: #3a1a08;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.lobby-status {
+  display: none;
+  color: #a02010;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.lobby-status.visible {
+  display: block;
+}
+
+.lobby-list {
+  list-style: none;
+  margin: 8px 0 4px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lobby-player {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.lobby-player.offline {
+  opacity: 0.5;
+}
+
+.lobby-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.lobby-name {
+  font-weight: 600;
+}
+
+.lobby-tag {
+  font-style: italic;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.lobby-note {
+  font-style: italic;
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.lobby-leave {
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .look-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .lobby {
+    top: auto;
+    bottom: calc(110px + var(--safe-bottom));
+    font-size: 14px;
+  }
+}
+
 /* Walking */
 .hud.walking .controls {
   opacity: 0;
