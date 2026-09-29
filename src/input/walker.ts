@@ -66,7 +66,8 @@ export class Walker {
     });
     element.addEventListener('wheel', (e) => {
       if (!this.active) return;
-      this.cameraDistance = THREE.MathUtils.clamp(this.cameraDistance * Math.exp(e.deltaY * 0.0015), 0, MAX_CAMERA_DISTANCE);
+      const from = e.deltaY > 0 ? Math.max(this.cameraDistance, FIRST_PERSON_THRESHOLD) : this.cameraDistance;
+      this.cameraDistance = THREE.MathUtils.clamp(from * Math.exp(e.deltaY * 0.0015), 0, MAX_CAMERA_DISTANCE);
       if (this.cameraDistance < FIRST_PERSON_THRESHOLD && e.deltaY < 0) this.cameraDistance = 0;
     });
     element.addEventListener('click', () => {
