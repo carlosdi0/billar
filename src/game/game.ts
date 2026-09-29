@@ -5,6 +5,7 @@ import { PointerControls } from '../input/pointer';
 import type {
   AimState,
   BallsState,
+  JamInfo,
   MatchSnapshot,
   PlayerInfo,
   Pose,
@@ -105,6 +106,7 @@ export class Game {
   private shooterIsMe = true;
   private pendingResult: ShotResult | null = null;
   private remoteShooter: string | null = null;
+  private musicBeforeJam: boolean | null = null;
 
   constructor(container: HTMLElement, quality: Quality) {
     const stage = new Stage(container, this.rig.camera, quality);
@@ -316,6 +318,7 @@ export class Game {
     const lobby = new LobbyPanel(document.body, code, {
       onStartMatch: (assisted) => this.hostStart(assisted),
       onLeave: () => this.leaveOnline(),
+      onShareJam: (url) => this.online?.client.send({ t: 'jam', url }),
     });
     this.online = { client, lobby, myId: '', players: [] };
     client.onStatus = (status) => lobby.setStatus(status);
@@ -344,6 +347,11 @@ export class Game {
     online.client.close();
     online.lobby.dispose();
     for (const p of online.players) this.remotes.remove(p.id);
+    if (this.musicBeforeJam !== null) {
+      this.sfx.setMusic(this.musicBeforeJam);
+      this.musicBeforeJam = null;
+      this.hud.setMusic(this.sfx.musicOn);
+    }
     this.online = null;
     this.leaveStroll();
     history.replaceState(null, '', location.pathname);
@@ -360,6 +368,7 @@ export class Game {
       case 'welcome':
         online.myId = message.you;
         this.syncPlayers(message.players);
+        this.setJam(message.jam ?? null, false);
         if (message.snapshot) this.applySnapshot(message.snapshot, false);
         break;
       case 'players':
@@ -398,6 +407,9 @@ export class Game {
         this.hud.toast(message.message || 'Error de conexión', 'foul');
         if (message.code === 'full' || message.code === 'version') this.leaveOnline();
         break;
+      case 'jam':
+        this.setJam(message.jam, true);
+        break;
       case 'pong':
         break;
     }
@@ -416,6 +428,23 @@ export class Game {
     for (const gone of previous) this.remotes.remove(gone);
     online.lobby.update(players, online.myId, this.phase !== 'menu');
     this.hud.updatePlayers(this.match, this.onTableSet(), this.names());
+  }
+
+  /** While a Spotify Jam is shared the in-game music steps aside, and comes back when it ends. */
+  private setJam(jam: JamInfo | null, announce: boolean): void {
+    const online = this.online;
+    if (!online) return;
+    const byName = jam ? (online.players.find((p) => p.id === jam.by)?.name ?? 'alguien') : '';
+    online.lobby.setJam(jam, byName);
+    if (jam && this.musicBeforeJam === null) {
+      this.musicBeforeJam = this.sfx.musicOn;
+      this.sfx.setMusic(false);
+    } else if (!jam && this.musicBeforeJam !== null) {
+      this.sfx.setMusic(this.musicBeforeJam);
+      this.musicBeforeJam = null;
+    }
+    this.hud.setMusic(this.sfx.musicOn);
+    if (announce) this.hud.toast(jam ? `🎵 ${byName} ha puesto un Spotify Jam: únete desde el panel de la sala` : 'Spotify Jam terminado', 'good');
   }
 
   private hostStart(assisted: boolean): void {

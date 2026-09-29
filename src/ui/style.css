@@ -706,6 +706,50 @@ canvas {
   }
 }
 
+.lobby-jam {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(58, 26, 8, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lobby.collapsed .lobby-jam {
+  display: none;
+}
+
+.jam-title {
+  font-weight: 600;
+}
+
+.jam-help {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.jam-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.jam-join {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.jam-input {
+  font-size: 14px;
+  padding: 5px 8px;
+}
+
+.jam-open {
+  align-self: flex-start;
+  font-size: 14px;
+}
+
 /* Walking */
 .hud.walking .controls {
   opacity: 0;

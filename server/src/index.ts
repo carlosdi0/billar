@@ -6,12 +6,14 @@ import {
   MAX_NAME_LENGTH,
   MAX_SEATS,
   POSE_ACTIONS,
+  JAM_URL_PATTERN,
   PROTOCOL_VERSION,
   ROOM_CODE_PATTERN,
 } from '../../src/net/protocol';
 import type {
   AimState,
   BallsState,
+  JamInfo,
   MatchSnapshot,
   PlayerInfo,
   Pose,
@@ -131,6 +133,7 @@ const KEY_MEMBERS = 'members';
 const KEY_SNAPSHOT = 'snapshot';
 const KEY_PENDING = 'pending';
 const KEY_EMPTY_SINCE = 'emptySince';
+const KEY_JAM = 'jam';
 const faceKey = (token: string) => `face:${token}`;
 
 export class Room extends DurableObject<Env> {
@@ -138,13 +141,15 @@ export class Room extends DurableObject<Env> {
   private snapshot: MatchSnapshot | null = null;
   private pending: PendingShot | null = null;
   private emptySince: number | null = null;
+  private jam: JamInfo | null = null;
   private readonly rate = new Map<string, { windowStart: number; count: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'));
     void ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get([KEY_MEMBERS, KEY_SNAPSHOT, KEY_PENDING, KEY_EMPTY_SINCE]);
+      const stored = await ctx.storage.get([KEY_MEMBERS, KEY_SNAPSHOT, KEY_PENDING, KEY_EMPTY_SINCE, KEY_JAM]);
+      this.jam = (stored.get(KEY_JAM) as JamInfo | undefined) ?? null;
       this.members = (stored.get(KEY_MEMBERS) as Members | undefined) ?? {};
       this.snapshot = (stored.get(KEY_SNAPSHOT) as MatchSnapshot | undefined) ?? null;
       this.pending = (stored.get(KEY_PENDING) as PendingShot | undefined) ?? null;
@@ -208,6 +213,8 @@ export class Room extends DurableObject<Env> {
         return this.handleShot(live, msg);
       case 'result':
         return this.handleResult(live, msg);
+      case 'jam':
+        return this.handleJam(live, msg);
       case 'ping':
         this.send(ws, { t: 'pong' });
         return;
@@ -317,7 +324,7 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.put({ [KEY_MEMBERS]: this.members });
     await this.ctx.storage.delete(KEY_EMPTY_SINCE);
 
-    this.send(ws, { t: 'welcome', you: member.id, players: this.playerList(), snapshot: this.snapshot });
+    this.send(ws, { t: 'welcome', you: member.id, players: this.playerList(), snapshot: this.snapshot, jam: this.jam });
 
     const faceTokens = Object.entries(this.members).filter(([, m]) => m.hasFace);
     if (faceTokens.length > 0) {
@@ -392,6 +399,19 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.put({ [faceKey(from.att.token)]: data, [KEY_MEMBERS]: this.members });
     this.broadcast({ t: 'face', id: from.att.id, data }, from.ws);
     this.broadcastPlayers();
+  }
+
+  private async handleJam(from: Live, msg: Record<string, unknown>): Promise<void> {
+    if (msg.url === null) {
+      this.jam = null;
+      await this.ctx.storage.delete(KEY_JAM);
+    } else if (typeof msg.url === 'string' && JAM_URL_PATTERN.test(msg.url)) {
+      this.jam = { url: msg.url, by: from.att.id };
+      await this.ctx.storage.put(KEY_JAM, this.jam);
+    } else {
+      return this.sendError(from.ws, 'bad', 'Only Spotify links are allowed');
+    }
+    this.broadcast({ t: 'jam', jam: this.jam });
   }
 
   // ------------------------------------------------------------ match flow
