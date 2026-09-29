@@ -104,6 +104,8 @@ export class Game {
   private strikeOrigin = { x: 0, z: 0 };
   private time = 0;
   private rollingLevel = 0;
+  /** Walk the player back to the table as soon as their turn can start. */
+  private seatWhenFree = false;
 
   private online: OnlineSession | null = null;
   private shotSeq = 0;
@@ -571,7 +573,8 @@ export class Game {
       this.hud.toast('¡Te toca!', 'good');
       this.resetSpin();
     }
-    if (!this.stroll.active) this.enterAim();
+    if (this.stroll.active) this.seatWhenFree = true;
+    else this.enterAim();
   }
 
   private beginOtherTurn(): void {
@@ -741,6 +744,20 @@ export class Game {
       this.hud.toast(`Aún no te toca: juega ${this.nameOf(this.match.current)}`);
       return;
     }
+    this.sitAtTable();
+  }
+
+  private trySeat(): void {
+    if (!this.stroll.active || this.phase !== 'aim' || !this.isMyTurn()) {
+      this.seatWhenFree = false;
+      return;
+    }
+    if (this.stroll.drinking) return;
+    this.seatWhenFree = false;
+    this.sitAtTable();
+  }
+
+  private sitAtTable(): void {
     const p = this.stroll.position;
     const cue = this.sim.balls[CUE];
     this.aimAngle = Math.atan2(cue.z - p.y, cue.x - p.x);
@@ -882,6 +899,7 @@ export class Game {
     this.match = snapshot.match;
     if (this.stroll.active) {
       this.phase = 'aim';
+      this.seatWhenFree = true;
       this.hud.updatePlayers(this.match, this.onTableSet(), this.names());
       return;
     }
@@ -927,6 +945,7 @@ export class Game {
     this.sfx.setRolling(this.rollingLevel);
 
     this.stroll.tick(dt);
+    if (this.seatWhenFree) this.trySeat();
     const control = this.canControl();
     const remoteAiming = this.phase === 'aim' && !this.isMyTurn();
     const showCue = control || remoteAiming || this.phase === 'strike';
