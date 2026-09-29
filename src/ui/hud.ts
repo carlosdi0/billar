@@ -11,6 +11,7 @@ export interface HudHandlers {
   onToggleSound(): void;
   onToggleMusic(): void;
   onStandUp(): void;
+  onJukebox(): void;
   onRestart(): void;
   onStart(assisted: boolean): void;
   onOnline(choice: OnlineChoice): void;
@@ -29,6 +30,7 @@ const ICONS = {
   mute: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
   music: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
   musicOff: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>',
+  radio: '<svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8l9-5"/><circle cx="15.5" cy="14" r="3"/><path d="M6 12h4M6 15h4"/></svg>',
   walk: '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M11 21l2-6 3 3v3M8 12l3-4 3 1 2 4 3 1M11 8l-1 5"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8H7"/><path d="M9 1L6 4l3 3"/></svg>',
 };
@@ -83,7 +85,8 @@ export class Hud {
     const buttons = el('div', 'buttons', this.root);
     this.viewButton = this.button(buttons, ICONS.cameraTop, 'Cambiar cámara', handlers.onToggleView);
     this.soundButton = this.button(buttons, ICONS.sound, 'Sonido', handlers.onToggleSound);
-    this.musicButton = this.button(buttons, ICONS.music, 'Música', handlers.onToggleMusic);
+    this.musicButton = this.button(buttons, ICONS.music, 'Música del saloon', handlers.onToggleMusic);
+    this.button(buttons, ICONS.radio, 'Gramola: música de YouTube', handlers.onJukebox);
     this.standButton = this.button(buttons, ICONS.walk, 'Levantarse y pasear (Q)', handlers.onStandUp);
     this.button(buttons, ICONS.restart, 'Nueva partida', handlers.onRestart);
 

@@ -1,6 +1,6 @@
 import { DEFAULT_LOOKS } from '../render/character';
-import type { JamInfo, PlayerInfo } from '../net/protocol';
-import { JAM_URL_PATTERN, MAX_NAME_LENGTH, ROOM_CODE_PATTERN } from '../net/protocol';
+import type { PlayerInfo } from '../net/protocol';
+import { MAX_NAME_LENGTH, ROOM_CODE_PATTERN } from '../net/protocol';
 import type { RoomStatus } from '../net/room';
 
 export interface OnlineChoice {
@@ -12,7 +12,6 @@ export interface OnlineChoice {
 export interface LobbyHandlers {
   onStartMatch(assisted: boolean): void;
   onLeave(): void;
-  onShareJam(url: string | null): void;
 }
 
 const SEAT_COLORS = ['#e0b04a', '#d8492c', '#4a8ad8', '#6fb04a'];
@@ -144,7 +143,6 @@ export class LobbyPanel {
   private readonly list: HTMLElement;
   private readonly actions: HTMLElement;
   private readonly note: HTMLElement;
-  private readonly jamBox: HTMLElement;
   private collapsed = false;
 
   constructor(parent: HTMLElement, private readonly code: string, private readonly handlers: LobbyHandlers) {
@@ -178,8 +176,6 @@ export class LobbyPanel {
     this.list = el('ul', 'lobby-list', this.root);
     this.note = el('div', 'lobby-note', this.root);
     this.actions = el('div', 'lobby-actions', this.root);
-    this.jamBox = el('div', 'lobby-jam', this.root);
-    this.setJam(null, '');
     const leave = el('button', 'overlay-link lobby-leave', this.root);
     leave.type = 'button';
     leave.textContent = 'Salir de la sala';
@@ -229,53 +225,6 @@ export class LobbyPanel {
     } else {
       this.note.textContent = 'Esperando a que el anfitrión empiece la partida…';
     }
-  }
-
-  setJam(jam: JamInfo | null, byName: string): void {
-    const box = this.jamBox;
-    box.replaceChildren();
-    if (jam) {
-      el('div', 'jam-title', box).textContent = `🎵 Spotify Jam de ${byName}`;
-      const row = el('div', 'jam-row', box);
-      const join = el('a', 'overlay-button small jam-join', row);
-      join.href = jam.url;
-      join.target = '_blank';
-      join.rel = 'noopener noreferrer';
-      join.textContent = 'Unirse al Jam';
-      const clear = el('button', 'lobby-copy', row);
-      clear.type = 'button';
-      clear.textContent = 'Quitar';
-      clear.addEventListener('click', () => this.handlers.onShareJam(null));
-      return;
-    }
-    const open = el('button', 'overlay-link jam-open', box);
-    open.type = 'button';
-    open.textContent = '🎵 Poner música con Spotify Jam';
-    open.addEventListener('click', () => {
-      box.replaceChildren();
-      el('div', 'jam-help', box).textContent =
-        'En Spotify (Premium): pon una canción → icono de dispositivos → Iniciar un Jam → Invitar → Copiar enlace. Pégalo aquí:';
-      const input = el('input', 'field-input jam-input', box);
-      input.placeholder = 'https://spotify.link/…';
-      const error = el('div', 'form-error', box);
-      const row = el('div', 'jam-row', box);
-      const share = el('button', 'overlay-button small', row);
-      share.type = 'button';
-      share.textContent = 'Compartir';
-      const cancel = el('button', 'lobby-copy', row);
-      cancel.type = 'button';
-      cancel.textContent = 'Cancelar';
-      cancel.addEventListener('click', () => this.setJam(null, ''));
-      share.addEventListener('click', () => {
-        const url = input.value.trim();
-        if (!JAM_URL_PATTERN.test(url)) {
-          error.textContent = 'Tiene que ser un enlace de Spotify (spotify.link u open.spotify.com)';
-          return;
-        }
-        this.handlers.onShareJam(url);
-      });
-      input.focus();
-    });
   }
 
   dispose(): void {

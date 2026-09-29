@@ -19,6 +19,7 @@ export class Sfx {
   private musicBus!: GainNode;
   private music: Music | null = null;
   private _musicOn = true;
+  private _ducked = false;
   private noise!: AudioBuffer;
   private rollGain: GainNode | null = null;
   private voices = 0;
@@ -65,10 +66,16 @@ export class Sfx {
     this.syncMusic();
   }
 
+  /** Silence all in-game music (generative songs and the ambient piano) without touching the saved preference. */
+  setDucked(ducked: boolean): void {
+    this._ducked = ducked;
+    this.syncMusic();
+  }
+
   private syncMusic(): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (this._musicOn && !this._muted) {
+    if (this._musicOn && !this._muted && !this._ducked) {
       this.music ??= new Music(ctx, this.musicBus);
       this.music.start();
     } else {
@@ -459,7 +466,7 @@ export class Sfx {
   private scheduleMusic(): void {
     const ctx = this.ready();
     if (!ctx) return;
-    if (document.hidden || this._musicOn) {
+    if (document.hidden || this._musicOn || this._ducked) {
       this.nextBeat = ctx.currentTime + 0.5;
       return;
     }

@@ -6,14 +6,16 @@ import {
   MAX_NAME_LENGTH,
   MAX_SEATS,
   POSE_ACTIONS,
-  JAM_URL_PATTERN,
   PROTOCOL_VERSION,
   ROOM_CODE_PATTERN,
+  YOUTUBE_LIST_PATTERN,
+  YOUTUBE_VIDEO_PATTERN,
 } from '../../src/net/protocol';
 import type {
   AimState,
   BallsState,
-  JamInfo,
+  MusicState,
+  SharedMusic,
   MatchSnapshot,
   PlayerInfo,
   Pose,
@@ -133,7 +135,13 @@ const KEY_MEMBERS = 'members';
 const KEY_SNAPSHOT = 'snapshot';
 const KEY_PENDING = 'pending';
 const KEY_EMPTY_SINCE = 'emptySince';
-const KEY_JAM = 'jam';
+const KEY_MUSIC = 'music';
+
+interface StoredMusic {
+  music: MusicState;
+  by: string;
+  at: number;
+}
 const faceKey = (token: string) => `face:${token}`;
 
 export class Room extends DurableObject<Env> {
@@ -141,15 +149,15 @@ export class Room extends DurableObject<Env> {
   private snapshot: MatchSnapshot | null = null;
   private pending: PendingShot | null = null;
   private emptySince: number | null = null;
-  private jam: JamInfo | null = null;
+  private music: StoredMusic | null = null;
   private readonly rate = new Map<string, { windowStart: number; count: number }>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('{"t":"ping"}', '{"t":"pong"}'));
     void ctx.blockConcurrencyWhile(async () => {
-      const stored = await ctx.storage.get([KEY_MEMBERS, KEY_SNAPSHOT, KEY_PENDING, KEY_EMPTY_SINCE, KEY_JAM]);
-      this.jam = (stored.get(KEY_JAM) as JamInfo | undefined) ?? null;
+      const stored = await ctx.storage.get([KEY_MEMBERS, KEY_SNAPSHOT, KEY_PENDING, KEY_EMPTY_SINCE, KEY_MUSIC]);
+      this.music = (stored.get(KEY_MUSIC) as StoredMusic | undefined) ?? null;
       this.members = (stored.get(KEY_MEMBERS) as Members | undefined) ?? {};
       this.snapshot = (stored.get(KEY_SNAPSHOT) as MatchSnapshot | undefined) ?? null;
       this.pending = (stored.get(KEY_PENDING) as PendingShot | undefined) ?? null;
@@ -213,8 +221,8 @@ export class Room extends DurableObject<Env> {
         return this.handleShot(live, msg);
       case 'result':
         return this.handleResult(live, msg);
-      case 'jam':
-        return this.handleJam(live, msg);
+      case 'music':
+        return this.handleMusic(live, msg);
       case 'ping':
         this.send(ws, { t: 'pong' });
         return;
@@ -324,7 +332,7 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.put({ [KEY_MEMBERS]: this.members });
     await this.ctx.storage.delete(KEY_EMPTY_SINCE);
 
-    this.send(ws, { t: 'welcome', you: member.id, players: this.playerList(), snapshot: this.snapshot, jam: this.jam });
+    this.send(ws, { t: 'welcome', you: member.id, players: this.playerList(), snapshot: this.snapshot, music: this.sharedMusic() });
 
     const faceTokens = Object.entries(this.members).filter(([, m]) => m.hasFace);
     if (faceTokens.length > 0) {
@@ -401,17 +409,22 @@ export class Room extends DurableObject<Env> {
     this.broadcastPlayers();
   }
 
-  private async handleJam(from: Live, msg: Record<string, unknown>): Promise<void> {
-    if (msg.url === null) {
-      this.jam = null;
-      await this.ctx.storage.delete(KEY_JAM);
-    } else if (typeof msg.url === 'string' && JAM_URL_PATTERN.test(msg.url)) {
-      this.jam = { url: msg.url, by: from.att.id };
-      await this.ctx.storage.put(KEY_JAM, this.jam);
+  private async handleMusic(from: Live, msg: Record<string, unknown>): Promise<void> {
+    if (msg.music === null) {
+      this.music = null;
+      await this.ctx.storage.delete(KEY_MUSIC);
     } else {
-      return this.sendError(from.ws, 'bad', 'Only Spotify links are allowed');
+      const music = parseMusic(msg.music);
+      if (!music) return this.sendError(from.ws, 'bad', 'Invalid music');
+      this.music = { music, by: from.att.id, at: Date.now() };
+      await this.ctx.storage.put(KEY_MUSIC, this.music);
     }
-    this.broadcast({ t: 'jam', jam: this.jam });
+    this.broadcast({ t: 'music', shared: this.sharedMusic() }, from.ws);
+  }
+
+  private sharedMusic(): SharedMusic | null {
+    const m = this.music;
+    return m ? { music: m.music, by: m.by, age: Date.now() - m.at } : null;
   }
 
   // ------------------------------------------------------------ match flow
@@ -756,6 +769,18 @@ function parseResult(value: unknown): ShotResult | null {
     parsed.push({ text: m.text.slice(0, MAX_RESULT_TEXT), kind });
   }
   return { seq, snapshot, messages: parsed };
+}
+
+function parseMusic(value: unknown): MusicState | null {
+  if (!isRecord(value)) return null;
+  const { list, video, index, time, playing } = value;
+  if (list !== null && (typeof list !== 'string' || !YOUTUBE_LIST_PATTERN.test(list))) return null;
+  if (video !== null && (typeof video !== 'string' || !YOUTUBE_VIDEO_PATTERN.test(video))) return null;
+  if (list === null && video === null) return null;
+  if (!isInteger(index) || index < 0 || index > 5000) return null;
+  if (!isFiniteNumber(time) || time < 0 || time > 86_400) return null;
+  if (typeof playing !== 'boolean') return null;
+  return { list, video, index, time, playing };
 }
 
 function randomId(length: number): string {

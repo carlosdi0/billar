@@ -77,11 +77,11 @@ export type ClientMessage =
   | { t: 'start'; snapshot: MatchSnapshot }
   | { t: 'shot'; shot: ShotMessage }
   | { t: 'result'; result: ShotResult }
-  | { t: 'jam'; url: string | null }
+  | { t: 'music'; music: MusicState | null }
   | { t: 'ping' };
 
 export type ServerMessage =
-  | { t: 'welcome'; you: string; players: PlayerInfo[]; snapshot: MatchSnapshot | null; jam?: JamInfo | null }
+  | { t: 'welcome'; you: string; players: PlayerInfo[]; snapshot: MatchSnapshot | null; music?: SharedMusic | null }
   | { t: 'players'; players: PlayerInfo[] }
   | { t: 'face'; id: string; data: string }
   | { t: 'pose'; id: string; pose: Pose }
@@ -90,16 +90,28 @@ export type ServerMessage =
   | { t: 'start'; snapshot: MatchSnapshot }
   | { t: 'shot'; id: string; shot: ShotMessage }
   | { t: 'result'; id: string; result: ShotResult }
-  | { t: 'jam'; jam: JamInfo | null }
+  | { t: 'music'; shared: SharedMusic | null }
   | { t: 'error'; code: 'full' | 'version' | 'bad' | 'forbidden'; message: string }
   | { t: 'pong' };
 
 export const ROOM_CODE_PATTERN = /^[A-Z0-9]{4,8}$/;
 
-/** A Spotify Jam invite shared with the room; only Spotify links are accepted. */
-export interface JamInfo {
-  url: string;
-  by: string;
+/** What the room's YouTube jukebox is playing. `time` is the position when the state was captured. */
+export interface MusicState {
+  list: string | null;
+  video: string | null;
+  index: number;
+  time: number;
+  playing: boolean;
 }
 
-export const JAM_URL_PATTERN = /^https:\/\/(open\.spotify\.com|spotify\.link)\/[A-Za-z0-9/_\-?=&.%]{1,200}$/;
+export interface SharedMusic {
+  music: MusicState;
+  /** Player id of the current DJ (the last one to change the music). */
+  by: string;
+  /** Milliseconds since the server stored the state, so late joiners can catch up. */
+  age: number;
+}
+
+export const YOUTUBE_LIST_PATTERN = /^[A-Za-z0-9_-]{10,64}$/;
+export const YOUTUBE_VIDEO_PATTERN = /^[A-Za-z0-9_-]{11}$/;

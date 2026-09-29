@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { Sfx } from '../audio/sfx';
+import { Jukebox } from '../audio/youtube';
 import { BALL_RADIUS as R, HALF_L, HALF_W, HEAD_STRING_X, SHOT } from '../config';
 import { PointerControls } from '../input/pointer';
 import type {
   AimState,
   BallsState,
-  JamInfo,
+  MusicState,
+  SharedMusic,
   MatchSnapshot,
   PlayerInfo,
   Pose,
@@ -28,6 +30,7 @@ import { createEnvironmentMap, createSaloon, type Saloon } from '../render/saloo
 import { Stage, type Quality } from '../render/stage';
 import { createTable } from '../render/table';
 import { Hud } from '../ui/hud';
+import { JukeboxPanel } from '../ui/jukeboxPanel';
 import { LobbyPanel, roomLink, type OnlineChoice } from '../ui/lobby';
 import { HEAD_SPOT, isFreeSpot, isInsidePlayArea, rackPositions, respotPosition } from './rack';
 import {
@@ -54,6 +57,7 @@ interface OnlineSession {
 
 const CUE = 0;
 const LAMP_HIDE_HEIGHT = 0.75;
+const DJ_BROADCAST_INTERVAL = 5;
 const POWER_EXPONENT = 1.6;
 const SPECTATOR_SPOTS = [
   { x: -2.1, z: 1.4 },
@@ -106,7 +110,10 @@ export class Game {
   private shooterIsMe = true;
   private pendingResult: ShotResult | null = null;
   private remoteShooter: string | null = null;
-  private musicBeforeJam: boolean | null = null;
+  private readonly jukeboxPanel: JukeboxPanel;
+  private readonly jukebox: Jukebox;
+  private djId: string | null = null;
+  private djTimer = 0;
 
   constructor(container: HTMLElement, quality: Quality) {
     const stage = new Stage(container, this.rig.camera, quality);
@@ -170,7 +177,20 @@ export class Game {
         if (!assisted) this.hud.toast('Modo difícil: sin guía de tiro');
       },
       onOnline: (choice) => this.joinOnline(choice),
+      onJukebox: () => this.jukeboxPanel.open(),
     });
+    this.jukeboxPanel = new JukeboxPanel(document.body, {
+      onLoad: (source) => this.startJukebox({ ...source, index: 0, time: 0, playing: true }),
+      onToggle: () => this.takeDj(() => this.jukebox.togglePlay()),
+      onNext: () => this.takeDj(() => this.jukebox.skip(1)),
+      onPrevious: () => this.takeDj(() => this.jukebox.skip(-1)),
+      onClose: () => this.stopJukebox(true),
+      onVolume: (volume) => this.jukebox.setVolume(volume),
+    });
+    this.jukebox = new Jukebox(this.jukeboxPanel.screen);
+    this.jukebox.onLocalChange = () => this.broadcastMusic();
+    this.jukebox.onTitle = (title) => this.jukeboxPanel.setTrack(title);
+    this.jukebox.onError = (message) => this.hud.toast(message, 'foul');
     this.hud.setMuted(this.sfx.muted);
     this.hud.setMusic(this.sfx.musicOn);
     this.hud.setViewMode(this.rig.mode);
@@ -318,7 +338,6 @@ export class Game {
     const lobby = new LobbyPanel(document.body, code, {
       onStartMatch: (assisted) => this.hostStart(assisted),
       onLeave: () => this.leaveOnline(),
-      onShareJam: (url) => this.online?.client.send({ t: 'jam', url }),
     });
     this.online = { client, lobby, myId: '', players: [] };
     client.onStatus = (status) => lobby.setStatus(status);
@@ -347,12 +366,9 @@ export class Game {
     online.client.close();
     online.lobby.dispose();
     for (const p of online.players) this.remotes.remove(p.id);
-    if (this.musicBeforeJam !== null) {
-      this.sfx.setMusic(this.musicBeforeJam);
-      this.musicBeforeJam = null;
-      this.hud.setMusic(this.sfx.musicOn);
-    }
     this.online = null;
+    this.djId = null;
+    this.jukebox.dj = true;
     this.leaveStroll();
     history.replaceState(null, '', location.pathname);
     this.phase = 'menu';
@@ -368,7 +384,11 @@ export class Game {
       case 'welcome':
         online.myId = message.you;
         this.syncPlayers(message.players);
-        this.setJam(message.jam ?? null, false);
+        if (message.music) this.followMusic(message.music, true);
+        else if (this.jukebox.active) {
+          this.djId = online.myId;
+          this.broadcastMusic();
+        }
         if (message.snapshot) this.applySnapshot(message.snapshot, false);
         break;
       case 'players':
@@ -407,8 +427,8 @@ export class Game {
         this.hud.toast(message.message || 'Error de conexión', 'foul');
         if (message.code === 'full' || message.code === 'version') this.leaveOnline();
         break;
-      case 'jam':
-        this.setJam(message.jam, true);
+      case 'music':
+        this.followMusic(message.shared, true);
         break;
       case 'pong':
         break;
@@ -430,21 +450,85 @@ export class Game {
     this.hud.updatePlayers(this.match, this.onTableSet(), this.names());
   }
 
-  /** While a Spotify Jam is shared the in-game music steps aside, and comes back when it ends. */
-  private setJam(jam: JamInfo | null, announce: boolean): void {
+  // ---------------------------------------------------------------- jukebox
+
+  private get amDj(): boolean {
+    return !this.online || this.djId === this.online.myId;
+  }
+
+  private startJukebox(state: MusicState): void {
+    this.sfx.unlock();
+    this.djId = this.online?.myId ?? null;
+    this.jukebox.dj = true;
+    void this.jukebox.apply(state, 0, !state.video);
+    this.jukeboxPanel.showPlaying(this.online ? 'tú' : '');
+    this.duckMusic(true);
+    this.djTimer = DJ_BROADCAST_INTERVAL - 2.5;
+  }
+
+  /** Pressing any jukebox control makes you the DJ everyone follows. */
+  private takeDj(action: () => void): void {
+    this.djId = this.online?.myId ?? null;
+    this.jukebox.dj = true;
+    this.jukeboxPanel.showPlaying(this.online ? 'tú' : '');
+    action();
+  }
+
+  private broadcastMusic(): void {
+    const online = this.online;
+    if (!online || !this.amDj) return;
+    const music = this.jukebox.state();
+    if (music) online.client.send({ t: 'music', music });
+  }
+
+  private followMusic(shared: SharedMusic | null, announce: boolean): void {
     const online = this.online;
     if (!online) return;
-    const byName = jam ? (online.players.find((p) => p.id === jam.by)?.name ?? 'alguien') : '';
-    online.lobby.setJam(jam, byName);
-    if (jam && this.musicBeforeJam === null) {
-      this.musicBeforeJam = this.sfx.musicOn;
-      this.sfx.setMusic(false);
-    } else if (!jam && this.musicBeforeJam !== null) {
-      this.sfx.setMusic(this.musicBeforeJam);
-      this.musicBeforeJam = null;
+    if (!shared) {
+      if (this.jukebox.active && announce) this.hud.toast('Se acabó la música de la gramola');
+      this.stopJukebox(false);
+      return;
     }
-    this.hud.setMusic(this.sfx.musicOn);
-    if (announce) this.hud.toast(jam ? `🎵 ${byName} ha puesto un Spotify Jam: únete desde el panel de la sala` : 'Spotify Jam terminado', 'good');
+    const fresh = !this.jukebox.active;
+    this.djId = shared.by;
+    this.jukebox.dj = shared.by === online.myId;
+    void this.jukebox.apply(shared.music, shared.age / 1000, false);
+    const dj = online.players.find((p) => p.id === shared.by)?.name ?? 'alguien';
+    this.jukeboxPanel.showPlaying(dj);
+    this.duckMusic(true);
+    if (fresh && announce) this.hud.toast(`🎵 ${dj} ha puesto música en la gramola`, 'good');
+  }
+
+  private stopJukebox(share: boolean): void {
+    const wasActive = this.jukebox.active;
+    this.jukebox.stop();
+    this.jukeboxPanel.showForm();
+    this.jukeboxPanel.hide();
+    this.djId = null;
+    this.duckMusic(false);
+    if (share && wasActive) this.online?.client.send({ t: 'music', music: null });
+  }
+
+  /** The generative saloon music steps aside while the jukebox plays. */
+  private duckMusic(duck: boolean): void {
+    this.sfx.setDucked(duck);
+  }
+
+  private updateJukebox(dt: number): void {
+    const online = this.online;
+    if (!online || !this.jukebox.active) return;
+    const dj = this.djId ? online.players.find((p) => p.id === this.djId) : undefined;
+    if ((!dj || !dj.connected) && this.me?.host && this.djId !== online.myId) {
+      this.djId = online.myId;
+      this.jukebox.dj = true;
+      this.jukeboxPanel.showPlaying('tú');
+    }
+    if (!this.amDj) return;
+    this.djTimer += dt;
+    if (this.djTimer >= DJ_BROADCAST_INTERVAL) {
+      this.djTimer = 0;
+      this.broadcastMusic();
+    }
   }
 
   private hostStart(assisted: boolean): void {
@@ -882,6 +966,7 @@ export class Game {
     }
     this.remotes.update(dt, this.time, this.rig.camera);
     this.streamState();
+    this.updateJukebox(dt);
 
     const focus = this.phase === 'strike' ? this.strikeOrigin : cueBall;
     this.rig.update(dt, focus.x, focus.z, this.aimAngle);
