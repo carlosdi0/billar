@@ -1,3 +1,5 @@
 node_modules
 dist
 sandbox
+server/node_modules
+server/.wrangler
