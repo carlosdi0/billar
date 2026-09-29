@@ -51,6 +51,8 @@ export interface AimState {
   vertical: number;
   cueX: number;
   cueZ: number;
+  /** Pocket called for the 8, or -1. */
+  pocket: number;
 }
 
 /** 16 entries indexed by ball id: [x, z, onTable ? 1 : 0]. */

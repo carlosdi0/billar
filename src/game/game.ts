@@ -26,6 +26,7 @@ import { CameraRig } from '../render/cameraRig';
 import { CueView } from '../render/cue';
 import { Drinks } from '../render/drinks';
 import { createPatrons, type Patrons } from '../render/patrons';
+import { PocketMarkers } from '../render/pocketMarkers';
 import { RemotePlayers } from '../render/remotePlayers';
 import { createEnvironmentMap, createSaloon, type Saloon } from '../render/saloon';
 import { Stage, type Quality } from '../render/stage';
@@ -36,6 +37,7 @@ import { JukeboxPanel } from '../ui/jukeboxPanel';
 import { LobbyPanel, roomLink, type OnlineChoice } from '../ui/lobby';
 import { HEAD_SPOT, isFreeSpot, isInsidePlayArea, rackPositions, respotPosition } from './rack';
 import {
+  emptyReport,
   evaluateShot,
   groupOf,
   isOnEight,
@@ -93,6 +95,7 @@ export class Game {
   private readonly drinks = new Drinks();
   private readonly handMarker: THREE.Mesh;
   private readonly kitchenLine: THREE.Mesh;
+  private readonly pocketMarkers: PocketMarkers;
 
   private phase: Phase = 'menu';
   private assisted = true;
@@ -101,7 +104,8 @@ export class Game {
   private power = 0;
   private spinSide = 0;
   private spinVertical = 0;
-  private report: ShotReport = { firstHit: null, pocketed: [], railAfterContact: false };
+  private report: ShotReport = emptyReport();
+  private calledPocket: number | null = null;
   private onTableBefore = new Set<number>();
   private strikeOrigin = { x: 0, z: 0 };
   private time = 0;
@@ -149,7 +153,8 @@ export class Game {
       new THREE.MeshBasicMaterial({ color: 0xf6e7c1, transparent: true, opacity: 0.35, depthWrite: false }),
     );
     this.kitchenLine.position.set(HEAD_STRING_X, 0.0015, 0);
-    scene.add(this.handMarker, this.kitchenLine);
+    this.pocketMarkers = new PocketMarkers(this.sim.pockets);
+    scene.add(this.handMarker, this.kitchenLine, this.pocketMarkers.group);
 
     this.hud = new Hud(document.body, {
       onPowerChange: (p) => (this.power = p),
@@ -209,6 +214,7 @@ export class Game {
       canPlaceCue: () => this.match.ballInHand && this.canControl(),
       cuePosition: () => this.sim.balls[CUE],
       placeCue: (x, z) => this.placeCue(x, z),
+      pickPocket: (x, z) => this.callPocket(x, z),
       rotateAim: (d) => (this.aimAngle += d),
       aimAt: (x, z) => {
         const c = this.sim.balls[CUE];
@@ -312,6 +318,7 @@ export class Game {
     this.setupRack();
     this.match = newMatch(Math.random() < 0.5 ? 0 : 1);
     this.shotSeq = 0;
+    this.calledPocket = null;
     this.resetSpin();
     this.rig.followShot = false;
     this.enterAim();
@@ -586,6 +593,7 @@ export class Game {
     this.match = snapshot.match;
     this.assisted = snapshot.assisted;
     this.shotSeq = snapshot.shotSeq;
+    this.calledPocket = null;
     this.pendingResult = null;
     this.remoteShooter = null;
     this.remotes.setShooting(null, 0, 0, 0, 0);
@@ -628,6 +636,7 @@ export class Game {
     this.power = aim.power;
     this.spinSide = aim.side;
     this.spinVertical = aim.vertical;
+    this.calledPocket = aim.pocket >= 0 && aim.pocket < this.sim.pockets.length ? aim.pocket : null;
     const cue = this.sim.balls[CUE];
     if (this.match.ballInHand && (cue.x !== aim.cueX || cue.z !== aim.cueZ)) this.sim.place(CUE, aim.cueX, aim.cueZ);
     this.remoteShooter = id;
@@ -643,7 +652,7 @@ export class Game {
     this.spinVertical = shot.vertical;
     this.power = powerForSpeed(shot.speed);
     this.onTableBefore = this.onTableSet();
-    this.report = { firstHit: null, pocketed: [], railAfterContact: false };
+    this.report = emptyReport(this.calledPocket);
     this.shotSeq = shot.seq;
     this.shooterIsMe = false;
     this.pendingResult = null;
@@ -692,6 +701,7 @@ export class Game {
         vertical: this.spinVertical,
         cueX: cue.x,
         cueZ: cue.z,
+        pocket: this.calledPocket ?? -1,
       });
     }
   }
@@ -706,16 +716,32 @@ export class Game {
     const mine = this.isMyTurn();
     this.hud.setControlsEnabled(mine);
     this.hud.updatePlayers(this.match, this.onTableSet(), this.names());
-    if (!mine) this.hud.setHint(`Turno de ${this.nameOf(this.match.current)}`);
-    else if (this.match.ballInHand) {
-      this.hud.setHint(
-        this.match.kitchenOnly
-          ? 'Bola en mano: arrastra la blanca detrás de la línea'
-          : 'Bola en mano: arrastra la blanca donde quieras',
-      );
-    } else {
-      this.hud.setHint(null);
+    this.hud.setHint(mine ? this.aimHint() : `Turno de ${this.nameOf(this.match.current)}`);
+  }
+
+  private aimHint(): string | null {
+    const calling = this.mustCallPocket();
+    if (calling && this.calledPocket === null) return 'Solo te queda la 8: haz clic en la tronera donde la vas a meter';
+    if (this.match.ballInHand) {
+      return this.match.kitchenOnly
+        ? 'Bola en mano: arrastra la blanca detrás de la línea'
+        : 'Bola en mano: arrastra la blanca donde quieras';
     }
+    return calling ? 'Tronera cantada · haz clic en otra para cambiarla' : null;
+  }
+
+  /** On the 8 the shooter has to call the pocket before shooting. */
+  private mustCallPocket(): boolean {
+    return !this.match.isBreak && isOnEight(this.match, this.match.current, this.onTableSet());
+  }
+
+  private callPocket(x: number, z: number): boolean {
+    if (!this.canControl() || !this.mustCallPocket()) return false;
+    const pocket = this.pocketMarkers.pick(x, z);
+    if (pocket === null) return false;
+    this.calledPocket = pocket;
+    this.sfx.uiClick();
+    return true;
   }
 
   private showGameOver(winner: number, reason: string): void {
@@ -842,13 +868,18 @@ export class Game {
 
   private shoot(power: number): void {
     if (!this.canControl()) return;
+    if (this.mustCallPocket() && this.calledPocket === null) {
+      this.hud.toast('Antes de tirar, canta tronera: haz clic donde vas a meter la 8', 'foul');
+      this.power = 0;
+      return;
+    }
     this.phase = 'strike';
     this.hud.setControlsEnabled(false);
     this.hud.setHint(null);
     const cueBall = this.sim.balls[CUE];
     this.strikeOrigin = { x: cueBall.x, z: cueBall.z };
     this.onTableBefore = this.onTableSet();
-    this.report = { firstHit: null, pocketed: [], railAfterContact: false };
+    this.report = emptyReport(this.calledPocket);
     this.power = power;
     this.shooterIsMe = true;
 
@@ -885,6 +916,7 @@ export class Game {
         this.sfx.cushionHit(Math.min(1, e.speed / 3.5), e.x / HALF_L);
       } else {
         this.report.pocketed.push(e.ball);
+        if (e.ball === 8) this.report.eightPocket = e.pocket;
         const pocket = this.sim.pockets[e.pocket];
         this.balls.startDrop(this.sim.balls[e.ball], pocket);
         this.sfx.pocket(Math.min(1, 0.3 + e.speed / 3), pocket.x / HALF_L);
@@ -918,6 +950,7 @@ export class Game {
 
   private finishShot(snapshot: MatchSnapshot, messages: Toast[]): void {
     const previous = this.match.current;
+    this.calledPocket = null;
     const shooterWasMe = this.shooterIsMe;
     this.shooterIsMe = true;
     for (const m of messages) this.hud.toast(m.text, m.kind);
@@ -1002,6 +1035,10 @@ export class Game {
       const prediction = predictAim(this.sim.balls, this.sim.segments, CUE, cueAngle);
       this.guide.update(cueBall.x, cueBall.z, cueAngle, prediction, this.isLegalTarget(prediction.target));
     }
+
+    if (control) this.hud.setHint(this.aimHint());
+    const choosingPocket = control && this.mustCallPocket();
+    this.pocketMarkers.update(this.time, choosingPocket, this.phase === 'menu' || this.phase === 'over' ? null : this.calledPocket);
 
     const inHand = (control || remoteAiming) && this.match.ballInHand;
     this.handMarker.visible = inHand;

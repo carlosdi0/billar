@@ -159,7 +159,7 @@ export class RoomClient {
     }
     if (this.pendingAim) {
       const a = this.pendingAim;
-      const key = `${a.dirX.toFixed(4)},${a.dirZ.toFixed(4)},${a.power.toFixed(2)},${a.side.toFixed(2)},${a.vertical.toFixed(2)},${a.cueX.toFixed(3)},${a.cueZ.toFixed(3)}`;
+      const key = `${a.dirX.toFixed(4)},${a.dirZ.toFixed(4)},${a.power.toFixed(2)},${a.side.toFixed(2)},${a.vertical.toFixed(2)},${a.cueX.toFixed(3)},${a.cueZ.toFixed(3)},${a.pocket}`;
       if (key !== this.lastAim) {
         this.send({ t: 'aim', aim: a });
         this.lastAim = key;

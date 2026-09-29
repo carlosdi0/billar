@@ -8,6 +8,8 @@ export interface PointerHost {
   canPlaceCue(): boolean;
   cuePosition(): { x: number; z: number };
   placeCue(x: number, z: number): void;
+  /** Returns true when the click called a pocket and should not start a drag. */
+  pickPocket(x: number, z: number): boolean;
   rotateAim(delta: number): void;
   aimAt(x: number, z: number): void;
   toggleView(): void;
@@ -67,6 +69,10 @@ export class PointerControls {
     }
 
     const point = this.tablePoint(e.clientX, e.clientY);
+    if (point && this.host.pickPocket(point.x, point.z)) {
+      this.drag = 'none';
+      return;
+    }
     const cue = this.host.cuePosition();
     if (point && this.host.canPlaceCue() && Math.hypot(point.x - cue.x, point.z - cue.z) < PICK_RADIUS) {
       this.drag = 'place';

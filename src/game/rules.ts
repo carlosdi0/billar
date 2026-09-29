@@ -5,6 +5,14 @@ export interface ShotReport {
   firstHit: number | null;
   pocketed: number[];
   railAfterContact: boolean;
+  /** Pocket index the 8 dropped into, if it did. */
+  eightPocket: number | null;
+  /** Pocket the shooter called for the 8 before a shot on it. */
+  calledPocket: number | null;
+}
+
+export function emptyReport(calledPocket: number | null = null): ShotReport {
+  return { firstHit: null, pocketed: [], railAfterContact: false, eightPocket: null, calledPocket };
 }
 
 export interface MatchState {
@@ -119,6 +127,8 @@ export function evaluateShot(
       return finish(opponent, `${label(player)} metió la 8 con falta`);
     } else if (!wasOnEight) {
       return finish(opponent, `${label(player)} metió la 8 antes de tiempo`);
+    } else if (report.eightPocket !== report.calledPocket) {
+      return finish(opponent, `${label(player)} metió la 8 en una tronera que no había cantado`);
     } else {
       return finish(player, `${label(player)} metió la 8`);
     }

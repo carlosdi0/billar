@@ -138,6 +138,14 @@ async function main() {
   check('pose relayed to B with id', gotPose?.id === wa.you && gotPose.pose.action === 'drink', gotPose);
   check('pose not echoed to A', (await a.type('pose', 400)) === null);
 
+  const aim = { dirX: 1, dirZ: 0, power: 0.4, side: 0, vertical: 0, cueX: 0.2, cueZ: 0.1, pocket: 3 };
+  a.send({ t: 'aim', aim });
+  check('aim with called pocket relayed', (await b.type('aim'))?.aim.pocket === 3);
+  a.send({ t: 'aim', aim: { ...aim, pocket: 6 } });
+  check('aim with pocket out of range -> bad', (await a.type('error'))?.code === 'bad');
+  a.send({ t: 'aim', aim: { ...aim, pocket: undefined } });
+  check('aim without pocket -> bad', (await a.type('error'))?.code === 'bad');
+
   a.send({ t: 'chat', text: '  hola   vaquero ​ ' });
   const gotChat = await b.type('chat');
   check('chat relayed sanitized with id', gotChat?.id === wa.you && gotChat.text === 'hola vaquero', gotChat);

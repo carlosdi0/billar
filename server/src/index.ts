@@ -6,6 +6,7 @@ import {
   MAX_MESSAGE_BYTES,
   MAX_NAME_LENGTH,
   MAX_SEATS,
+  POCKET_COUNT,
   POSE_ACTIONS,
   PROTOCOL_VERSION,
   ROOM_CODE_PATTERN,
@@ -694,9 +695,10 @@ function parsePose(value: unknown): Pose | null {
 
 function parseAim(value: unknown): AimState | null {
   if (!isRecord(value)) return null;
-  const { dirX, dirZ, power, side, vertical, cueX, cueZ } = value;
+  const { dirX, dirZ, power, side, vertical, cueX, cueZ, pocket } = value;
   const nums = [dirX, dirZ, power, side, vertical, cueX, cueZ];
   if (!nums.every(isFiniteNumber)) return null;
+  if (!isInteger(pocket) || pocket < -1 || pocket >= POCKET_COUNT) return null;
   return {
     dirX: dirX as number,
     dirZ: dirZ as number,
@@ -705,6 +707,7 @@ function parseAim(value: unknown): AimState | null {
     vertical: vertical as number,
     cueX: cueX as number,
     cueZ: cueZ as number,
+    pocket,
   };
 }
 
