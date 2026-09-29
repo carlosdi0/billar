@@ -257,11 +257,11 @@ interface WantedInfo {
 }
 
 const WANTED: readonly WantedInfo[] = [
-  { name: 'BLACK JACK KELLY', reward: '$500', crime: 'For cheating at cards & horse thievery' },
-  { name: 'EIGHT-BALL PETE', reward: '$1,000', crime: 'For robbing the Dodge City stage' },
-  { name: 'LUCKY SAM CORBIN', reward: '$750', crime: 'For train robbery on the Santa Fe line' },
-  { name: '"CUE STICK" McGRAW', reward: '$2,000', crime: 'For bank robbery & jailbreak' },
-  { name: 'THE CORNER POCKET KID', reward: '$300', crime: 'For rustling cattle in Tombstone' },
+  { name: 'JORGE TIJUANAS', reward: '$500', crime: 'For cheating at cards & horse thievery' },
+  { name: 'BUME BUMESITO', reward: '$1,000', crime: 'For robbing the Dodge City stage' },
+  { name: 'DIO GARCIA', reward: '$750', crime: 'For train robbery on the Santa Fe line' },
+  { name: 'YUNG CHINASKI', reward: '$2,000', crime: 'For bank robbery & jailbreak' },
+  { name: 'EL SEVILLANO', reward: '$300', crime: 'For rustling cattle in Tombstone' },
 ];
 
 const POSTER_PX = { w: 380, h: 532 } as const;
