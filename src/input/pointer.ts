@@ -50,6 +50,7 @@ export class PointerControls {
 
   private down(e: PointerEvent): void {
     this.host.unlockAudio();
+    if (document.pointerLockElement) return;
     this.element.setPointerCapture(e.pointerId);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 

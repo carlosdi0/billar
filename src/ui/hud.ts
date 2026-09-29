@@ -9,6 +9,7 @@ export interface HudHandlers {
   onToggleView(): void;
   onToggleSound(): void;
   onToggleMusic(): void;
+  onStandUp(): void;
   onRestart(): void;
   onStart(assisted: boolean): void;
 }
@@ -26,6 +27,7 @@ const ICONS = {
   mute: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
   music: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
   musicOff: '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/><path d="M3 3l18 18"/></svg>',
+  walk: '<svg viewBox="0 0 24 24"><circle cx="13" cy="4" r="2"/><path d="M11 21l2-6 3 3v3M8 12l3-4 3 1 2 4 3 1M11 8l-1 5"/></svg>',
   restart: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 108-8H7"/><path d="M9 1L6 4l3 3"/></svg>',
 };
 
@@ -56,6 +58,8 @@ export class Hud {
   private readonly viewButton: HTMLButtonElement;
   private readonly soundButton: HTMLButtonElement;
   private readonly musicButton: HTMLButtonElement;
+  private readonly standButton: HTMLButtonElement;
+  private currentHint = '';
   private readonly overlay: HTMLElement;
   private readonly controls: HTMLElement;
   private toastTimer = 0;
@@ -77,6 +81,7 @@ export class Hud {
     this.viewButton = this.button(buttons, ICONS.cameraTop, 'Cambiar cámara', handlers.onToggleView);
     this.soundButton = this.button(buttons, ICONS.sound, 'Sonido', handlers.onToggleSound);
     this.musicButton = this.button(buttons, ICONS.music, 'Música', handlers.onToggleMusic);
+    this.standButton = this.button(buttons, ICONS.walk, 'Levantarse y pasear (Q)', handlers.onStandUp);
     this.button(buttons, ICONS.restart, 'Nueva partida', handlers.onRestart);
 
     this.toastBox = el('div', 'toasts', this.root);
@@ -227,7 +232,17 @@ export class Hud {
     this.musicButton.innerHTML = on ? ICONS.music : ICONS.musicOff;
   }
 
+  setStandUpAvailable(available: boolean): void {
+    this.standButton.style.display = available ? '' : 'none';
+  }
+
+  setWalkMode(walking: boolean): void {
+    this.root.classList.toggle('walking', walking);
+  }
+
   setHint(text: string | null): void {
+    if ((text ?? '') === this.currentHint) return;
+    this.currentHint = text ?? '';
     this.hint.textContent = text ?? '';
     this.hint.classList.toggle('visible', !!text);
   }

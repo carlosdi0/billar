@@ -1,12 +1,23 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { TABLE } from '../config';
+import { TABLE_EXTENT } from './table';
 import { createLeatherTexture, createWoodTexture } from './textures';
+
+/** Obstacle footprint on the floor plane, in world X/Z. */
+export type SaloonCollider =
+  | { kind: 'circle'; x: number; z: number; r: number }
+  | { kind: 'box'; minX: number; maxX: number; minZ: number; maxZ: number };
 
 export interface Saloon {
   group: THREE.Group;
   tableLight: THREE.SpotLight;
   lampFixture: THREE.Object3D;
+  colliders: SaloonCollider[];
+  /** Player start: inside by the doors, facing the table (yaw = rotation.y of a +Z-facing body). */
+  spawn: { x: number; z: number; yaw: number };
+  /** Walkable interior with a margin to the walls; the doorway is not walkable. */
+  walkBounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   update(time: number, dt: number): void;
 }
 
@@ -33,6 +44,9 @@ const SHADE_X = [-0.62, 0, 0.62] as const;
 
 const WINDOW = { x: 2.0, halfWidth: 0.55, bottom: 1.25, top: 2.45 } as const;
 const MOON_DIR: V3 = [-0.25, -1, 0.5]; // travel per metre of fall
+
+const WALL_MARGIN = 0.3;
+const TABLE_CLEARANCE = 0.05;
 
 const PI = Math.PI;
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -824,6 +838,15 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
   const IRON = new THREE.Color('#2b2824');
   const BONE = new THREE.Color('#d6cab0');
 
+  const colliders: SaloonCollider[] = [];
+  const blockCircle = (x: number, z: number, r: number): void => {
+    colliders.push({ kind: 'circle', x, z, r });
+  };
+  const blockBox = (minX: number, maxX: number, minZ: number, maxZ: number): void => {
+    colliders.push({ kind: 'box', minX, maxX, minZ, maxZ });
+  };
+  blockBox(-TABLE_EXTENT.x - TABLE_CLEARANCE, TABLE_EXTENT.x + TABLE_CLEARANCE, -TABLE_EXTENT.z - TABLE_CLEARANCE, TABLE_EXTENT.z + TABLE_CLEARANCE);
+
   // --- Room shell -----------------------------------------------------------
   floor.add(new THREE.PlaneGeometry(HX * 2, HZ * 2).rotateX(-PI / 2).translate(0, FLOOR_Y, 0));
   floor.add(new THREE.PlaneGeometry(0.8, DOOR_HALF * 2).rotateX(-PI / 2).translate(HX + 0.4, FLOOR_Y, 0));
@@ -851,6 +874,7 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
 
   // --- Bar ------------------------------------------------------------------
   const BAR_LEN = 5.4;
+  blockBox(-HX, -3.74, -BAR_LEN / 2 - 0.1, BAR_LEN / 2 + 0.1);
   rail.add(at(box(0.5, 1.02, BAR_LEN), -4.2, fy(0.51), 0));
   rail.add(at(box(0.64, 0.05, BAR_LEN + 0.12), -4.19, fy(1.045), 0));
   dark.add(at(box(0.03, 0.12, BAR_LEN), -3.935, fy(0.06), 0));
@@ -920,10 +944,12 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
     seg,
   );
   metal.add(spittoon.translate(-3.72, FLOOR_Y, -2.95), { color: BRASS });
+  blockCircle(-3.72, -2.95, 0.15);
 
   // stools
   for (const z of [-2.2, -1.1, 0, 1.1, 2.2]) {
     const x = -3.55;
+    blockCircle(x, z, 0.2);
     leather.add(new THREE.CylinderGeometry(0.17, 0.16, 0.06, seg).translate(x, fy(0.73), z), { uvScale: [2, 0.25] });
     for (let k = 0; k < 4; k++) {
       const a = PI / 4 + (k * PI) / 2;
@@ -937,6 +963,8 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
   {
     const m = frame(-2.2, FLOOR_Y, HZ);
     const L = (g: THREE.BufferGeometry): THREE.BufferGeometry => g.applyMatrix4(m);
+    blockBox(-2.2 - 0.79, -2.2 + 0.79, HZ - 0.62, HZ);
+    blockCircle(-2.2, HZ - 0.85, 0.2);
     rail.add(L(at(box(1.5, 1.28, 0.34), 0, 0.64, -0.17)));
     rail.add(L(at(box(1.5, 0.09, 0.26), 0, 0.7, -0.47)));
     for (const s of [-1, 1]) {
@@ -988,6 +1016,7 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
 
   const CHIP_COLORS = ['#8b1f1a', '#d8d0bc', '#1e2d55'];
   const pokerTable = (cx: number, cz: number, chairAngles: readonly number[]): void => {
+    blockCircle(cx, cz, 0.52);
     rail.add(new THREE.CylinderGeometry(0.5, 0.5, 0.045, seg * 2).translate(cx, fy(0.76), cz));
     matte.add(new THREE.CylinderGeometry(0.43, 0.43, 0.006, seg * 2).translate(cx, fy(0.785), cz), { color: '#1f4630' });
     dark.add(new THREE.CylinderGeometry(0.06, 0.08, 0.72, 10).translate(cx, fy(0.38), cz));
@@ -997,6 +1026,7 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
       const dz = Math.sin(a);
       const pull = 0.72 + rand() * 0.12;
       chair(frame(cx + dx * pull, FLOOR_Y, cz + dz * pull, Math.atan2(-dx, -dz) + (rand() - 0.5) * 0.4));
+      blockCircle(cx + dx * pull, cz + dz * pull, 0.27);
     }
     for (let i = 0; i < 6; i++) {
       const a = rand() * PI * 2;
@@ -1027,6 +1057,7 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
     barrelProfile.push(new THREE.Vector2(0.25 + 0.045 * Math.sin(t * PI), t * BARREL_H));
   }
   const barrel = (x: number, z: number): void => {
+    blockCircle(x, z, 0.31);
     const ry = rand() * PI;
     walls.add(new THREE.LatheGeometry(barrelProfile, seg).rotateY(ry).translate(x, FLOOR_Y, z), { uvScale: [0.72, 0.36] });
     walls.add(new THREE.CircleGeometry(0.25, seg).rotateX(-PI / 2).translate(x, fy(BARREL_H - 0.02), z));
@@ -1040,6 +1071,7 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
   barrel(-5.08, 3.95);
   barrel(5.05, -1.6);
   dark.add(at(box(0.52, 0.5, 0.52), -5.18, fy(0.25), 3.3, 0.1));
+  blockBox(-HX, -5.18 + 0.3, 3.3 - 0.3, 3.3 + 0.3);
   for (const y of [0.1, 0.4]) dark.add(at(box(0.54, 0.06, 0.54), -5.18, fy(y), 3.3, 0.1));
 
   // --- Window and moonlight -------------------------------------------------
@@ -1251,7 +1283,10 @@ export function createSaloon(opts: { quality: Quality }): Saloon {
     setDoors(0.08 + 0.06 * draft + 0.015 * Math.sin(time * 1.3), 0.12 + 0.05 * draft + 0.015 * Math.sin(time * 1.1 + 2));
   };
 
-  return { group, tableLight, lampFixture: lampFixture.object, update };
+  const walkBounds = { minX: -HX + WALL_MARGIN, maxX: HX - WALL_MARGIN, minZ: -HZ + WALL_MARGIN, maxZ: HZ - WALL_MARGIN };
+  const spawn = { x: HX - 1.2, z: 0, yaw: -PI / 2 };
+
+  return { group, tableLight, lampFixture: lampFixture.object, colliders, spawn, walkBounds, update };
 }
 
 // ---------------------------------------------------------------------------

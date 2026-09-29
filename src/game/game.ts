@@ -25,6 +25,7 @@ import {
   type ShotReport,
 } from './rules';
 import { buildTableGeometry } from '../physics/tableGeometry';
+import { Stroll } from './stroll';
 
 type Phase = 'menu' | 'aim' | 'strike' | 'roll' | 'over';
 
@@ -39,6 +40,7 @@ export class Game {
   private readonly guide = new AimGuide();
   private readonly saloon: Saloon;
   private readonly patrons: Patrons;
+  private readonly stroll: Stroll;
   private readonly sfx = new Sfx();
   private readonly hud: Hud;
   private readonly stage: Stage;
@@ -70,6 +72,7 @@ export class Game {
     this.patrons = createPatrons({ quality: stage.quality });
     scene.add(this.patrons.group);
     scene.add(createTable(buildTableGeometry()));
+    this.stroll = new Stroll(scene, stage.canvas, this.saloon, this.patrons, stage.quality);
 
     this.balls = new BallViews(stage.quality);
     scene.add(this.balls.group, this.cue.object, this.guide.group, this.drinks.group);
@@ -105,6 +108,7 @@ export class Game {
         this.sfx.setMusic(!this.sfx.musicOn);
         this.hud.setMusic(this.sfx.musicOn);
       },
+      onStandUp: () => this.standUp(),
       onRestart: () => {
         this.sfx.uiClick();
         this.newGame();
@@ -120,9 +124,11 @@ export class Game {
     this.hud.setMuted(this.sfx.muted);
     this.hud.setMusic(this.sfx.musicOn);
     this.hud.setViewMode(this.rig.mode);
+    this.hud.setStandUpAvailable(this.stroll.available);
+    window.addEventListener('keydown', (e) => this.onKey(e));
 
     new PointerControls(stage.canvas, this.rig, {
-      canAim: () => this.phase === 'aim',
+      canAim: () => this.phase === 'aim' && !this.stroll.active,
       canPlaceCue: () => this.match.ballInHand,
       cuePosition: () => this.sim.balls[CUE],
       placeCue: (x, z) => this.placeCue(x, z),
@@ -204,7 +210,44 @@ export class Game {
     }
   }
 
+  private onKey(e: KeyboardEvent): void {
+    if (e.repeat) return;
+    if (e.code === 'KeyQ' && !this.stroll.active) this.standUp();
+    else if (e.code === 'KeyE' && this.stroll.active) this.takeCue();
+  }
+
+  private standUp(): void {
+    if (!this.stroll.available || this.stroll.active) return;
+    if (this.phase !== 'aim' && this.phase !== 'roll') return;
+    this.sfx.uiClick();
+    const cue = this.sim.balls[CUE];
+    this.stroll.enter(this.rig.camera.position, cue.x, cue.z);
+    this.rig.walking = true;
+    this.hud.setWalkMode(true);
+  }
+
+  private takeCue(): void {
+    if (this.phase !== 'aim' || !this.stroll.nearTable()) return;
+    const p = this.stroll.position;
+    const cue = this.sim.balls[CUE];
+    this.aimAngle = Math.atan2(cue.z - p.y, cue.x - p.x);
+    this.stroll.exit();
+    this.rig.walking = false;
+    this.rig.mode = 'aim';
+    this.hud.setViewMode('aim');
+    this.hud.setWalkMode(false);
+    this.enterAim();
+  }
+
+  private walkHint(): string {
+    if (!this.stroll.pointerLocked) return 'Haz clic para mirar con el ratón · WASD para moverte';
+    if (this.phase !== 'aim') return 'Las bolas están rodando…';
+    if (this.stroll.nearTable()) return `Pulsa E para jugar · turno de ${playerLabel(this.match.current)}`;
+    return `Turno de ${playerLabel(this.match.current)}: acércate a la mesa`;
+  }
+
   private toggleView(): void {
+    if (this.stroll.active) return;
     this.sfx.uiClick();
     this.rig.mode = this.rig.mode === 'aim' ? 'top' : 'aim';
     this.hud.setViewMode(this.rig.mode);
@@ -291,6 +334,11 @@ export class Game {
     else if (verdict.turnChanged) this.sfx.turnChange();
     verdict.messages.forEach((m, i) => this.hud.toast(m, verdict.foul && i === 0 ? 'foul' : 'info'));
     if (verdict.turnChanged && !verdict.foul) this.hud.toast(`Turno de ${playerLabel(this.match.current)}`);
+    if (this.stroll.active) {
+      this.phase = 'aim';
+      this.hud.updatePlayers(this.match, this.onTableSet());
+      return;
+    }
     this.enterAim();
   }
 
@@ -327,7 +375,7 @@ export class Game {
     }
     this.sfx.setRolling(this.rollingLevel);
 
-    const aiming = this.phase === 'aim';
+    const aiming = this.phase === 'aim' && !this.stroll.active;
     if (aiming || this.phase === 'strike') {
       const origin = this.phase === 'strike' ? this.strikeOrigin : cueBall;
       this.cue.aim(origin.x, origin.z, this.aimAngle, this.power, this.spinSide, this.spinVertical);
@@ -352,9 +400,15 @@ export class Game {
     }
 
     this.balls.sync(this.sim.balls, dt);
-    this.saloon.lampFixture.visible = this.rig.mode !== 'top' && this.rig.camera.position.y < LAMP_HIDE_HEIGHT;
+    this.saloon.lampFixture.visible =
+      this.stroll.active || (this.rig.mode !== 'top' && this.rig.camera.position.y < LAMP_HIDE_HEIGHT);
     this.saloon.update(this.time, dt);
     this.patrons.update(this.time, dt);
+
+    if (this.stroll.active) {
+      this.stroll.update(dt, this.time, this.rig);
+      this.hud.setHint(this.walkHint());
+    }
 
     const focus = this.phase === 'strike' ? this.strikeOrigin : cueBall;
     this.rig.update(dt, focus.x, focus.z, this.aimAngle);

@@ -451,6 +451,29 @@ canvas {
   touch-action: none;
 }
 
+/* Walking */
+.hud.walking .controls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hud.walking .controls * {
+  pointer-events: none !important;
+}
+
+.hud.walking::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: rgba(243, 227, 195, 0.7);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
 /* Overlay */
 .overlay {
   position: fixed;

@@ -4,6 +4,9 @@ import { TABLE_EXTENT } from './table';
 
 export type ViewMode = 'aim' | 'top';
 
+const WALK_FOV = 62;
+const WALK_SMOOTHING = 28;
+
 const FOV = 45;
 const MIN_PITCH = THREE.MathUtils.degToRad(4);
 const MAX_PITCH = THREE.MathUtils.degToRad(78);
@@ -19,6 +22,7 @@ export class CameraRig {
   distance = 0.85;
   /** While balls roll the aim camera rises to follow the action. */
   followShot = false;
+  walking = false;
 
   private readonly position = new THREE.Vector3(-3, 1.5, 0);
   private readonly look = new THREE.Vector3();
@@ -58,12 +62,29 @@ export class CameraRig {
     this.camera.updateProjectionMatrix();
   }
 
+  setWalkPose(position: THREE.Vector3, target: THREE.Vector3): void {
+    this.targetPosition.copy(position);
+    this.targetLook.copy(target);
+    this.targetUp.set(0, 1, 0);
+    this.targetFov = WALK_FOV;
+  }
+
   update(dt: number, focusX: number, focusZ: number, angle: number): void {
+    if (this.walking) this.blendTo(dt, WALK_SMOOTHING);
+    else {
+      this.computeTarget(focusX, focusZ, angle);
+      this.blendTo(dt, SMOOTHING);
+    }
+  }
+
+  private computeTarget(focusX: number, focusZ: number, angle: number): void {
     if (this.mode === 'top') this.computeTop();
     else if (this.followShot) this.computeShot();
     else this.computeAim(focusX, focusZ, angle);
+  }
 
-    const k = 1 - Math.exp(-SMOOTHING * dt);
+  private blendTo(dt: number, smoothing: number): void {
+    const k = 1 - Math.exp(-smoothing * dt);
     this.position.lerp(this.targetPosition, k);
     this.look.lerp(this.targetLook, k);
     this.up.lerp(this.targetUp, k).normalize();
